@@ -33,12 +33,12 @@ static int row(void *ctx,unsigned long y,unsigned char *rgb,size_t bytes)
  memset(&r,0,sizeof(r));r.MethodID=PDTM_READPIXELARRAY;r.pbpa_Left=0;r.pbpa_Top=y;r.pbpa_Width=p->width;r.pbpa_Height=1;
  if(p->argb){
   r.pbpa_PixelData=p->argb;r.pbpa_PixelFormat=PBPAFMT_ARGB;r.pbpa_PixelArrayMod=p->width*4;
-  if(!DoDTMethodA(p->dto,NULL,NULL,(Msg)&r))return 0;
+  if(!DoMethodA(p->dto,(Msg)&r))return 0;
   for(x=0;x<p->width;x++){unsigned long a=p->argb[x*4],c;for(c=0;c<3;c++)rgb[x*3+c]=(unsigned char)((p->argb[x*4+1+c]*a+255*(255-a)+127)/255);}
   return 1;
  }
  r.pbpa_PixelData=rgb;r.pbpa_PixelFormat=PBPAFMT_RGB;r.pbpa_PixelArrayMod=bytes;
- return DoDTMethodA(p->dto,NULL,NULL,(Msg)&r)!=0;
+ return DoMethodA(p->dto,(Msg)&r)!=0;
 }
 static void result(const char *req,const char *state,const char *msg)
 {
