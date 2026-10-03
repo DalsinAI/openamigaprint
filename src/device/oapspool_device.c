@@ -5,6 +5,7 @@
 #include <exec/errors.h>
 #include <exec/execbase.h>
 #include <exec/io.h>
+#include <devices/parallel.h>
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <dos/dostags.h>
@@ -121,7 +122,26 @@ static void dev_beginio(REG(a1,struct IORequest *raw),REG(a6,struct OAPSpoolBase
         io->io_Actual=wrote;b->bytes+=wrote;update_tail(b,(const UBYTE *)io->io_Data,wrote);
         if(ends_pdf(b))finish_job(b);
         break;
-    case CMD_FLUSH: break;
+    case PDCMD_QUERY:
+        /*
+         * printer.device treats a custom port device as parallel-compatible.
+         * OpenAmigaPrint is a virtual PDF spooler, so physical conditions such
+         * as paper-out and printer-busy can never apply.  Report selected and
+         * write-direction, with PAPEROUT and PARBUSY permanently clear.
+         */
+        if(raw->io_Message.mn_Length < sizeof(struct IOExtPar)){
+            io->io_Error=IOERR_BADLENGTH;break;
+        }
+        ((struct IOExtPar *)raw)->io_Status=(UBYTE)(IOPTF_PARSEL|IOPTF_RWDIR);
+        break;
+    case PDCMD_SETPARAMS:
+    case CMD_UPDATE:
+    case CMD_CLEAR:
+    case CMD_STOP:
+    case CMD_START:
+    case CMD_FLUSH:
+        /* No physical transport state exists; these are successful no-ops. */
+        break;
     case CMD_RESET:
         if(b->file){close_spool(b);DeleteFile((STRPTR)b->path);}
         b->bytes=0;b->tail_len=0;break;

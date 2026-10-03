@@ -77,6 +77,7 @@ Copy:
 C/OpenAmigaPrint          -> C:OpenAmigaPrint
 C/OAPPrintTest            -> C:OAPPrintTest
 C/OAPSpoolTest            -> C:OAPSpoolTest
+C/OAPStatusTest           -> C:OAPStatusTest
 Devs/oapspool.device      -> DEVS:oapspool.device
 Devs/Printers/OpenAmigaPrint -> DEVS:Printers/OpenAmigaPrint
 ```
@@ -87,7 +88,7 @@ In **Printer Preferences** select:
 - Printer Port: device
 - Device Unit: `oapspool.device`, unit 0
 
-Then `OAPPrintTest` exercises the ordinary `printer.device` path.
+Run `OAPStatusTest` first to verify the virtual port reports ready with paper-out and busy permanently clear. Then `OAPPrintTest` exercises the ordinary `printer.device` path. See `HOW_TO_TEST_FIRST_LIGHT.md` for the complete acceptance test.
 
 The generated PDF is spooled under `T:OpenAmigaPrint-job-XXXX.pdf`; once `%%EOF` is received, `oapspool.device` launches `C:OpenAmigaPrint` asynchronously.
 ## Network model
