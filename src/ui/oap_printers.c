@@ -158,8 +158,11 @@ void oap_program_path(const char *program, char *path, size_t cap)
         me->pr_WindowPtr = requesters;
     }
     if (lock) {
+        /* the full name: another process (a new shell) has its own PROGDIR: */
+        int named = NameFromLock(lock, (STRPTR)path, (LONG)cap) != 0;
         UnLock(lock);
-        return;
+        if (named)
+            return;
     }
     snprintf(path, cap, "C:%s", program);
 }

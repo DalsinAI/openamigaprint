@@ -44,6 +44,7 @@ int oap_printers_find(const OAPPrinterList *list, const char *uri);
 void oap_printer_name_from_uri(const char *uri, char *name, size_t cap);
 int oap_printer_is_file(const OAPPrinter *p);
 
-/* A helper program beside this one (PROGDIR:) or else in C:. */
+/* A helper program beside this one (PROGDIR:, as a full path another
+ * process can use) or else in C:. */
 void oap_program_path(const char *program, char *path, size_t cap);
 #endif

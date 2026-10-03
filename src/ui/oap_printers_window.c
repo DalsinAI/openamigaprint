@@ -14,6 +14,7 @@
 #include "oap.h"
 #include "oap_discovery.h"
 #include "oap_printers.h"
+#include "oap_stack.h"
 #include "oap_queue.h"
 #include "oap_selection.h"
 
@@ -388,6 +389,7 @@ static void read_job(QueueRow *r)
             while (fgets(line, sizeof(line), f)) {
                 job_field(line, "state=", state, sizeof(state));
                 job_field(line, "printer=", printer, sizeof(printer));
+                job_field(line, "title=", r->name, sizeof(r->name));   /* what was printed, not the spool name */
             }
             fclose(f);
         }
@@ -667,12 +669,14 @@ static int key(UWORD code, int *done)
     return 0;
 }
 
-int main(void)
+static int printers_main(int argc, char **argv)
 {
     struct Node *n;
     ULONG sigs, result;
     UWORD code;
     int done = 0, rc = 20;
+    (void)argc;
+    (void)argv;
 
     memset(&P, 0, sizeof(P));
     NewList(&P.printer_rows);
@@ -766,4 +770,8 @@ out:
     if (WindowBase) CloseLibrary(WindowBase);
     if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
     return rc;
+}
+int main(int argc, char **argv)
+{
+    return oap_main_with_stack(printers_main, argc, argv, 65536);
 }
