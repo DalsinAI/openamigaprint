@@ -8,6 +8,7 @@
 #include <proto/dos.h>
 #include <string.h>
 #include "oap_spooler.h"
+#include "oap_device.h"
 
 static void mark(const char *name,const char *text)
 {
@@ -16,6 +17,39 @@ static void mark(const char *name,const char *text)
     strncat(path,name,sizeof(path)-5);
     f=Open((STRPTR)path,MODE_NEWFILE);
     if(f){Write(f,(APTR)text,(LONG)strlen(text));Close(f);}
+}
+
+
+static void hex8(char *p,ULONG v)
+{
+    static const char h[]="0123456789abcdef";
+    int i; for(i=7;i>=0;i--){p[i]=h[v&15];v>>=4;}
+}
+
+static void dump_stats(void)
+{
+    struct MsgPort *p=NULL;
+    struct IOStdReq *io=NULL;
+    struct OAPDeviceStats st;
+    char out[]="opens=00000000 closes=00000000 queries=00000000 writes=00000000 unit=00000000 flags=00000000\n";
+    memset(&st,0,sizeof(st));
+    p=CreateMsgPort();
+    if(p)io=(struct IOStdReq *)CreateIORequest(p,sizeof(*io));
+    if(!p||!io){mark("OAPField.08-device-stats","FAIL stats allocation\n");goto done;}
+    if(OpenDevice((STRPTR)"oapspool.device",0,(struct IORequest *)io,0)){
+        mark("OAPField.08-device-stats","FAIL stats device open\n");goto done;
+    }
+    io->io_Command=OAPCMD_GETSTATS;io->io_Data=&st;io->io_Length=sizeof(st);
+    if(DoIO((struct IORequest *)io)){
+        mark("OAPField.08-device-stats","FAIL stats query\n");CloseDevice((struct IORequest *)io);goto done;
+    }
+    CloseDevice((struct IORequest *)io);
+    hex8(out+6,st.open_calls);hex8(out+22,st.close_calls);hex8(out+39,st.query_calls);
+    hex8(out+55,st.write_calls);hex8(out+69,st.last_open_unit);hex8(out+84,st.last_open_flags);
+    mark("OAPField.08-device-stats",out);
+done:
+    if(io)DeleteIORequest((struct IORequest *)io);
+    if(p)DeleteMsgPort(p);
 }
 
 int main(void)
@@ -87,6 +121,7 @@ direct_done:
 printer_done:
     DeleteIORequest((struct IORequest *)prt);
     DeleteMsgPort(p);
+    dump_stats();
     mark("OAPField.99-done","field test completed\n");
     return 0;
 }
