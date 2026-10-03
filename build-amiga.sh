@@ -12,11 +12,13 @@ file "$OUT/OpenAmigaPrint"
 wc -c "$OUT/OpenAmigaPrint"
 
 BARE="-m68000 -O2 -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin -Wall -Wextra -nostartfiles -nostdlib"
-"$CC" $BARE -o "$OUT/oapspool.device" "$ROOT/src/device/oapspool_device.c" -lgcc
+"$CC" $BARE -I"$ROOT/include" -o "$OUT/oapspool.device" "$ROOT/src/device/oapspool_device.c" -lgcc
+"$CC" -m68000 -O2 -Wall -Wextra -Werror -noixemul -I"$ROOT/include" \
+  -o "$OUT/OAPSpooler" "$ROOT/src/spooler/oapspooler.c"
 "$CC" -m68000 -O2 -Wall -Wextra -noixemul   -o "$OUT/oapspooltest" "$ROOT/tests/oapspooltest.c"
 "$CC" -m68000 -O2 -Wall -Wextra -Werror -noixemul   -o "$OUT/oapstatustest" "$ROOT/tests/oapstatustest.c"
-file "$OUT/oapspool.device" "$OUT/oapspooltest" "$OUT/oapstatustest"
-wc -c "$OUT/oapspool.device" "$OUT/oapspooltest" "$OUT/oapstatustest"
+file "$OUT/oapspool.device" "$OUT/OAPSpooler" "$OUT/oapspooltest" "$OUT/oapstatustest"
+wc -c "$OUT/oapspool.device" "$OUT/OAPSpooler" "$OUT/oapspooltest" "$OUT/oapstatustest"
 
 "$CC" -m68000 -c -o "$OUT/printertag.o" "$ROOT/src/driver/printertag.s"
 "$CC" -m68000 -O2 -Wall -Wextra -fomit-frame-pointer -fno-toplevel-reorder   -fno-builtin -nostdlib -c -o "$OUT/openamigaprint_driver.o"   "$ROOT/src/driver/openamigaprint_driver.c"
