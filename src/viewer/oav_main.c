@@ -8,6 +8,7 @@
 #include <dos/dos.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/gadgetclass.h>
+#include <intuition/icclass.h>
 #include <graphics/gfxbase.h>
 #include <datatypes/datatypesclass.h>
 #include <datatypes/pictureclass.h>
@@ -102,15 +103,18 @@ static void close_content(void)
 static int load_file(const char *path)
 {
  Object *dto;struct DataType *dt=NULL;struct IBox *area=NULL;struct BitMapHeader *bmh=NULL;
- ULONG group=0,w=1,h=1,sw,sh;LONG left,top,dw,dh,cropx=0,cropy=0;double k;
- struct pdtScale scale;char msg[256];FILE *f;long bytes;
+ ULONG group=0,w=1,h=1,sw,sh;LONG left,top,dw,dh,cropx=0,cropy=0;
+ struct pdtScale scale;struct gpLayout prep;struct FrameInfo fi;struct dtFrameBox frame;char msg[256];FILE *f;long bytes;
  if(!oav_safe_field(path)){status("Invalid or overlong file path");return 0;}
  {const char *ext=strrchr(path,'.');if(ext&&(!strcasecmp(ext,".docx")||!strcasecmp(ext,".pptx"))){status(oav_format_note(path));return 0;}}
  f=fopen(path,"rb");if(!f){status("Cannot open source file");return 0;}fseek(f,0,SEEK_END);bytes=ftell(f);fclose(f);
  if(bytes<0||bytes>(long)OAV_FILE_LIMIT){status("Source exceeds the 64 MiB viewer file limit");return 0;}
  status("Loading datatype...");
- dto=NewDTObject((APTR)path,DTA_SourceType,DTST_FILE,PDTA_DestMode,PMODE_V43,PDTA_Screen,(ULONG)A.screen,PDTA_Remap,TRUE,AGA_Secure,TRUE,DTA_ControlPanel,TRUE,GA_ID,1000,TAG_DONE);
+ dto=NewDTObject((APTR)path,DTA_SourceType,DTST_FILE,ICA_TARGET,ICTARGET_IDCMP,PDTA_DestMode,PMODE_V43,PDTA_Screen,(ULONG)A.screen,PDTA_Remap,TRUE,AGA_Secure,TRUE,DTA_ControlPanel,TRUE,GA_ID,1000,TAG_DONE);
  if(!dto){snprintf(msg,sizeof(msg),"Cannot decode (DOS %ld). %.180s",(long)IoErr(),oav_format_note(path));status(msg);return 0;}
+ memset(&fi,0,sizeof(fi));memset(&frame,0,sizeof(frame));
+ frame.MethodID=DTM_FRAMEBOX;frame.dtf_ContentsInfo=&fi;frame.dtf_FrameInfo=&fi;frame.dtf_SizeFrameInfo=sizeof(fi);
+ DoDTMethodA(dto,NULL,NULL,(Msg)&frame);
  GetDTAttrs(dto,DTA_DataType,(ULONG)&dt,DTA_NominalHoriz,(ULONG)&w,DTA_NominalVert,(ULONG)&h,TAG_DONE);
  if(dt&&dt->dtn_Header)group=dt->dtn_Header->dth_GroupID;
  if(group==GID_PICTURE){GetDTAttrs(dto,PDTA_BitMapHeader,(ULONG)&bmh,TAG_DONE);if(bmh){w=bmh->bmh_Width;h=bmh->bmh_Height;}}
@@ -122,18 +126,20 @@ static int load_file(const char *path)
  A.paperbox.Width=0;
  if(group==GID_PICTURE){
   if(A.page&&oav_place(&A.settings,w,h,&A.placement)){
-   k=(double)(dw-12)/A.placement.page_w;if((double)(dh-12)/A.placement.page_h<k)k=(double)(dh-12)/A.placement.page_h;
-   A.paperbox.Width=(WORD)(A.placement.page_w*k);A.paperbox.Height=(WORD)(A.placement.page_h*k);
+   if((long)(dw-12)*A.placement.page_h<=(long)(dh-12)*A.placement.page_w){
+    A.paperbox.Width=(WORD)(dw-12);A.paperbox.Height=(WORD)oav_scale(A.placement.page_h,dw-12,A.placement.page_w);
+   }else{A.paperbox.Height=(WORD)(dh-12);A.paperbox.Width=(WORD)oav_scale(A.placement.page_w,dh-12,A.placement.page_h);}
    A.paperbox.Left=(WORD)(left+(dw-A.paperbox.Width)/2);A.paperbox.Top=(WORD)(top+(dh-A.paperbox.Height)/2);
-   sw=(ULONG)(A.placement.w*k+0.5);sh=(ULONG)(A.placement.h*k+0.5);
-   left=A.paperbox.Left+(LONG)(A.placement.x*k);top=A.paperbox.Top+(LONG)((A.placement.page_h-A.placement.y-A.placement.h)*k);
-   {LONG cx=A.paperbox.Left+(LONG)(A.placement.clip_x*k),cy=A.paperbox.Top+(LONG)(A.placement.clip_y*k);
-    LONG cw=(LONG)(A.placement.clip_w*k),ch=(LONG)(A.placement.clip_h*k);
+   sw=(ULONG)oav_scale(A.placement.w,A.paperbox.Width,A.placement.page_w);sh=(ULONG)oav_scale(A.placement.h,A.paperbox.Width,A.placement.page_w);
+   left=A.paperbox.Left+oav_scale(A.placement.x,A.paperbox.Width,A.placement.page_w);top=A.paperbox.Top+oav_scale(A.placement.page_h-A.placement.y-A.placement.h,A.paperbox.Width,A.placement.page_w);
+   {LONG cx=A.paperbox.Left+oav_scale(A.placement.clip_x,A.paperbox.Width,A.placement.page_w),cy=A.paperbox.Top+oav_scale(A.placement.clip_y,A.paperbox.Width,A.placement.page_w);
+    LONG cw=oav_scale(A.placement.clip_w,A.paperbox.Width,A.placement.page_w),ch=oav_scale(A.placement.clip_h,A.paperbox.Width,A.placement.page_w);
     cropx=left<cx?cx-left:0;cropy=top<cy?cy-top:0;if(left<cx)left=cx;if(top<cy)top=cy;
     dw=(LONG)sw-cropx;dh=(LONG)sh-cropy;if(left+dw>cx+cw)dw=cx+cw-left;if(top+dh>cy+ch)dh=cy+ch-top;}
   }else{
-   k=A.zoom?(double)A.zoom/100.0:(double)dw/w;if(!A.zoom&&(double)dh/h<k)k=(double)dh/h;
-   sw=(ULONG)(w*k+0.5);sh=(ULONG)(h*k+0.5);
+   if(A.zoom){sw=w*(ULONG)A.zoom/100;sh=h*(ULONG)A.zoom/100;}
+   else if((ULONG)dw*h<=(ULONG)dh*w){sw=(ULONG)dw;sh=(h*(ULONG)dw+w/2)/w;}
+   else{sh=(ULONG)dh;sw=(w*(ULONG)dh+h/2)/h;}
   }
   if(sw<1)sw=1;if(sh<1)sh=1;
   if(sw<=8192&&sh<=8192&&(sw!=w||sh!=h)){
@@ -143,6 +149,10 @@ static int load_file(const char *path)
  }
  if(dw<1)dw=1;if(dh<1)dh=1;
  SetDTAttrs(dto,NULL,NULL,GA_Left,left,GA_Top,top,GA_Width,dw,GA_Height,dh,DTA_TopHoriz,cropx,DTA_TopVert,cropy,TAG_DONE);
+ if(group==GID_PICTURE){
+  memset(&prep,0,sizeof(prep));prep.MethodID=DTM_PROCLAYOUT;prep.gpl_Initial=TRUE;
+  if(!DoDTMethodA(dto,NULL,NULL,(Msg)&prep)){DisposeDTObject(dto);status("Picture layout failed before display");return 0;}
+ }
  close_content();A.dto=dto;A.group=group;A.natural_w=w;A.natural_h=h;
  copystr(A.path,sizeof(A.path),path);
  if(AddDTObject(A.win,NULL,dto,-1)<0){DisposeDTObject(dto);A.dto=NULL;status("Datatype could not attach to the preview window");return 0;}
@@ -151,7 +161,7 @@ static int load_file(const char *path)
  SetGadgetAttrs((struct Gadget *)A.pause,A.win,NULL,GA_Disabled,!(trigger_supported(STM_PAUSE)||group==GID_ANIMATION),TAG_DONE);
  SetGadgetAttrs((struct Gadget *)A.stop,A.win,NULL,GA_Disabled,!(trigger_supported(STM_STOP)||group==GID_ANIMATION),TAG_DONE);
  snprintf(msg,sizeof(msg),"%s | %lu x %lu | %s",dt&&dt->dtn_Header?(char *)dt->dtn_Header->dth_Name:"Datatype",(unsigned long)w,(unsigned long)h,group==GID_PICTURE?"picture; original pixels retained for export":group==GID_ANIMATION?"animation":"native datatype view");
- status(msg);A.refresh=1;return 1;
+ status(msg);RefreshGList((struct Gadget *)A.space,A.win,NULL,1);A.refresh=1;return 1;
 }
 static void reload(void){char path[OAV_PATH_MAX];if(!A.path[0])return;copystr(path,sizeof(path),A.path);load_file(path);}
 static int choose_file(char *path,int save)
@@ -225,12 +235,12 @@ static int action(int id,const char *arg)
 }
 static int set_option(const char *key,const char *val)
 {
- OAVLayout proposed=A.settings;char *end=NULL;double margin;
+ OAVLayout proposed=A.settings;long margin;
  if(!key||!val)return 0;
  if(!strcasecmp(key,"PAPER")){if(!strcasecmp(val,"A4"))proposed.paper=OAV_A4;else if(!strcasecmp(val,"LETTER"))proposed.paper=OAV_LETTER;else return 0;}
  else if(!strcasecmp(key,"ORIENTATION")){if(!strcasecmp(val,"PORTRAIT"))proposed.landscape=0;else if(!strcasecmp(val,"LANDSCAPE"))proposed.landscape=1;else return 0;}
  else if(!strcasecmp(key,"SCALE")){if(!strcasecmp(val,"FIT"))proposed.scale=OAV_FIT;else if(!strcasecmp(val,"FILL"))proposed.scale=OAV_FILL;else return 0;}
- else if(!strcasecmp(key,"MARGIN")){margin=strtod(val,&end);if(!end||*end||!(margin>=0.0)||margin>144)return 0;proposed.margin_pt=margin;}
+ else if(!strcasecmp(key,"MARGIN")){if(!oav_parse_points(val,&margin))return 0;proposed.margin_cpt=margin;}
  else if(!strcasecmp(key,"PRINTER")){if(!oav_safe_field(val)||strlen(val)>=384)return 0;SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)val,TAG_DONE);return 1;}
  else return 0;
  A.settings=proposed;
@@ -281,8 +291,8 @@ static int window_create(void)
  A.winobj=NewObject(WINDOW_GetClass(),NULL,
   WA_Title,(ULONG)"OpenAmigaView - Viewer & Print",WA_ScreenTitle,(ULONG)"OpenAmigaPrint | ReAction datatype workspace",
   WA_PubScreen,(ULONG)A.screen,WA_Activate,TRUE,WA_DragBar,TRUE,WA_CloseGadget,TRUE,WA_DepthGadget,TRUE,WA_SizeGadget,TRUE,
-  WA_InnerWidth,760,WA_InnerHeight,500,WA_MinWidth,600,WA_MinHeight,360,
-  WA_IDCMP,IDCMP_IDCMPUPDATE|IDCMP_INTUITICKS|IDCMP_RAWKEY,
+  WA_Left,10,WA_Top,26,WA_InnerWidth,760,WA_InnerHeight,500,WA_MinWidth,600,WA_MinHeight,360,
+  WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_NEWSIZE|IDCMP_REFRESHWINDOW|IDCMP_IDCMPUPDATE|IDCMP_INTUITICKS|IDCMP_RAWKEY,
   WINDOW_IDCMPHook,(ULONG)&A.idcmp_hook,WINDOW_IDCMPHookBits,IDCMP_IDCMPUPDATE|IDCMP_REFRESHWINDOW,
   WINDOW_Layout,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,LAYOUT_SpaceOuter,TRUE,LAYOUT_DeferLayout,TRUE,
    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
@@ -291,7 +301,7 @@ static int window_create(void)
     LAYOUT_AddChild,(ULONG)(make_button("Fit view",B_FIT)),LAYOUT_AddChild,(ULONG)(make_button("100%",B_ONE)),
     LAYOUT_AddChild,(ULONG)(make_button("-",B_MINUS)),CHILD_WeightedWidth,0,LAYOUT_AddChild,(ULONG)(make_button("+",B_PLUS)),CHILD_WeightedWidth,0,
     LAYOUT_AddChild,(ULONG)(make_button("Format info",B_INFO)),
-   TAG_DONE)),
+   TAG_DONE)),CHILD_WeightedHeight,0,
    LAYOUT_AddChild,(ULONG)(A.file=NewObject(STRING_GetClass(),NULL,GA_ReadOnly,TRUE,STRINGA_MaxChars,OAV_PATH_MAX,STRINGA_MinVisible,32,STRINGA_TextVal,(ULONG)"Open a file to begin",TAG_DONE)),CHILD_WeightedHeight,0,
    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
     LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,

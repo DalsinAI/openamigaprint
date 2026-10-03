@@ -4,15 +4,18 @@
 #include <stddef.h>
 #include <stdio.h>
 #define OAV_PATH_MAX 512
+#define OAV_DIM_LIMIT 16384UL
 #define OAV_PIXEL_LIMIT 16777216UL
 #define OAV_FILE_LIMIT 67108864UL
 #define OAV_VERSION "0.2.0-alpha1"
 #define OAV_REQUEST_DIR "SYS:Spool/OpenAmigaView"
 enum { OAV_A4, OAV_LETTER };
 enum { OAV_FIT, OAV_FILL };
-typedef struct OAVLayout { int paper, landscape, scale; double margin_pt; } OAVLayout;
-typedef struct OAVPlacement { double page_w,page_h,x,y,w,h,clip_x,clip_y,clip_w,clip_h; } OAVPlacement;
+typedef struct OAVLayout { int paper, landscape, scale; long margin_cpt; } OAVLayout;
+typedef struct OAVPlacement { long page_w,page_h,x,y,w,h,clip_x,clip_y,clip_w,clip_h; } OAVPlacement;
 typedef int (*OAVReadRow)(void *ctx,unsigned long row,unsigned char *rgb,size_t bytes);
+long oav_scale(long value,long numerator,long denominator);
+int oav_parse_points(const char *s,long *cpt);
 void oav_layout_defaults(OAVLayout *s);
 int oav_place(const OAVLayout *s,unsigned long w,unsigned long h,OAVPlacement *p);
 int oav_safe_field(const char *s);
