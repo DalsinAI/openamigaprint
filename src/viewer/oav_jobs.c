@@ -26,9 +26,9 @@ int oav_submit(const OAVRequest *r,char *request,size_t cap,char *err,size_t err
  }
  if(i==100){copystr(err,errcap,"Cannot allocate a unique job ID");return 0;}
  f=fdopen(fd,"w");if(!f){close(fd);remove(path);copystr(err,errcap,"Cannot write request");return 0;}
- fprintf(f,"schema=1\naction=%s\nsource=%s\noutput=%s\nuri=%s\npaper=%d\nlandscape=%d\nscale=%d\nmargin=%.4f\n",r->action,r->source,r->output,r->uri,r->layout.paper,r->layout.landscape,r->layout.scale,r->layout.margin_pt);
+ fprintf(f,"schema=2\naction=%s\nsource=%s\noutput=%s\nuri=%s\npaper=%d\nlandscape=%d\nscale=%d\nmargin_cpt=%ld\n",r->action,r->source,r->output,r->uri,r->layout.paper,r->layout.landscape,r->layout.scale,r->layout.margin_cpt);
  {int bad=ferror(f);if(fclose(f))bad=1;if(bad){remove(path);copystr(err,errcap,"Request write failed");return 0;}}
- snprintf(cmd,sizeof(cmd),"C:OAVWorker %s",path);
+ snprintf(cmd,sizeof(cmd),"Stack 65536\nC:OAVWorker %s",path);
  rc=SystemTags((STRPTR)cmd,SYS_Asynch,TRUE,NP_StackSize,65536,SYS_InName,(ULONG)"NIL:",SYS_OutName,(ULONG)"NIL:",TAG_DONE);
  if(rc<0){copystr(err,errcap,"Cannot start C:OAVWorker; request preserved");copystr(request,cap,path);return 0;}
  copystr(request,cap,path);copystr(err,errcap,"Job started; original-resolution source, background worker");return 1;
@@ -47,9 +47,9 @@ int oav_read_request(const char *path,OAVRequest *r)
   else if(!strcmp(line,"paper"))r->layout.paper=atoi(v);
   else if(!strcmp(line,"landscape"))r->layout.landscape=atoi(v);
   else if(!strcmp(line,"scale"))r->layout.scale=atoi(v);
-  else if(!strcmp(line,"margin"))r->layout.margin_pt=strtod(v,NULL);
+  else if(!strcmp(line,"margin_cpt"))r->layout.margin_cpt=strtol(v,NULL,10);
  }
- fclose(f);return schema==1&&oav_safe_field(r->source);
+ fclose(f);return schema==2&&oav_safe_field(r->source);
 }
 int oav_result(const char *req,char *state,size_t statecap,char *msg,size_t msgcap)
 {

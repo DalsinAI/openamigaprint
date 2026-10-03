@@ -48,17 +48,21 @@ static void result(const char *req,const char *state,const char *msg)
 }
 static int copyfile(const char *from,const char *to)
 {
- FILE *a=fopen(from,"rb"),*b;char buf[8192];size_t n;unsigned long total=0;int ok=1;
+ FILE *a=fopen(from,"rb"),*b;static char buf[8192];size_t n;unsigned long total=0;int ok=1;
  if(!a)return 0;b=fopen(to,"wb");if(!b){fclose(a);return 0;}
  while((n=fread(buf,1,sizeof(buf),a))){total+=(unsigned long)n;if(total>OAV_FILE_LIMIT||fwrite(buf,1,n,b)!=n){ok=0;break;}}
  if(ferror(a))ok=0;fclose(a);if(fclose(b))ok=0;if(!ok)remove(to);return ok;
 }
 int main(int argc,char **argv)
 {
- OAVRequest r;Pixels px;Object *dto=NULL;struct BitMapHeader *bmh=NULL;FILE *f=NULL;
- char snapshot[OAV_PATH_MAX+20],out[OAV_PATH_MAX],part[OAV_PATH_MAX+20],meta[OAV_PATH_MAX+20],msg[256];
+ static OAVRequest r;static Pixels px;Object *dto=NULL;struct BitMapHeader *bmh=NULL;FILE *f=NULL;
+ static char snapshot[OAV_PATH_MAX+20],out[OAV_PATH_MAX],part[OAV_PATH_MAX+20],meta[OAV_PATH_MAX+20],msg[256];
  char hdr[6]={0};const char *id;long size;ULONG alpha=0;int ok=0;BPTR l;
  if(argc!=2)return 20;memset(&px,0,sizeof(px));part[0]=0;
+ {char tracepath[OAV_PATH_MAX+16];FILE *trace;struct Task *task=FindTask(NULL);
+  snprintf(tracepath,sizeof(tracepath),"%s.trace",argv[1]);trace=fopen(tracepath,"w");
+  if(trace){fprintf(trace,"worker started; stack bytes=%lu\n",(unsigned long)((UBYTE *)task->tc_SPUpper-(UBYTE *)task->tc_SPLower));fclose(trace);}}
+
  if(!oav_read_request(argv[1],&r)){result(argv[1],"error","Invalid job request");return 20;}
  snprintf(px.cancel,sizeof(px.cancel),"%s.cancel",argv[1]);
  if(!strcmp(r.action,"send")){
