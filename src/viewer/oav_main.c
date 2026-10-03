@@ -65,7 +65,7 @@ static struct App {
  OAVLayout settings;OAVPlacement placement;
  struct IBox paperbox,contentbox;ULONG group,natural_w,natural_h,whitepen;
  char path[OAV_PATH_MAX],lastreq[OAV_PATH_MAX],message[256],resultbuf[2048];
- int running,refresh,page,zoom,job_active,qcount,have_white,ticks;
+ int running,refresh,page,zoom,job_active,qcount,have_white,ticks,poll_jobs;
 } A;
 static struct ColumnInfo columns[]={{65,(STRPTR)"Job",CIF_DRAGGABLE},{35,(STRPTR)"State",CIF_DRAGGABLE},{-1,NULL,0}};
 static void copystr(char *d,size_t n,const char *s){if(n){strncpy(d,s,n-1);d[n-1]=0;}}
@@ -84,6 +84,7 @@ static ULONG idcmp_hook(REG(a0,struct Hook *h),REG(a2,Object *o),REG(a1,struct I
 {
  (void)h;(void)o;if(im->Class==IDCMP_IDCMPUPDATE){A.refresh=1;}
  if(im->Class==IDCMP_REFRESHWINDOW)A.refresh=1;
+ if(im->Class==IDCMP_INTUITICKS&&++A.ticks>=10){A.ticks=0;A.poll_jobs=1;}
  return 0;
 }
 static ULONG render_hook(REG(a0,struct Hook *h),REG(a2,Object *o),REG(a1,struct gpRender *r))
@@ -144,7 +145,7 @@ static int load_file(const char *path)
   if(sw<1)sw=1;if(sh<1)sh=1;
   if(sw<=8192&&sh<=8192&&(sw!=w||sh!=h)){
    scale.MethodID=PDTM_SCALE;scale.ps_NewWidth=sw;scale.ps_NewHeight=sh;scale.ps_Flags=0;
-   if(!DoDTMethodA(dto,NULL,NULL,(Msg)&scale)){A.paperbox.Width=0;left=area->Left+2;top=area->Top+2;dw=area->Width-4;dh=area->Height-4;cropx=cropy=0;}
+   if(!DoMethodA(dto,(Msg)&scale)){A.paperbox.Width=0;left=area->Left+2;top=area->Top+2;dw=area->Width-4;dh=area->Height-4;cropx=cropy=0;}
   }
  }
  if(dw<1)dw=1;if(dh<1)dh=1;
@@ -188,7 +189,7 @@ static void scan_queue(void)
 static int selected(void){LONG i=-1;GetAttr(LISTBROWSER_Selected,A.qg,(ULONG *)&i);return i>=0&&i<A.qcount?(int)i:-1;}
 static int start_job(const char *action,const char *output,const char *source)
 {
- OAVRequest r;ULONG uri=0;char err[256];if(A.job_active){status("A worker is active; wait or request Cancel");return 0;}
+ OAVRequest r;ULONG uri=0;char err[256];if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg)))A.job_active=0;}if(A.job_active){status("A worker is active; wait or request Cancel");return 0;}
  memset(&r,0,sizeof(r));copystr(r.source,sizeof(r.source),source?source:A.path);copystr(r.action,sizeof(r.action),action);if(output)copystr(r.output,sizeof(r.output),output);
  GetAttr(STRINGA_TextVal,A.uri,&uri);if(uri)copystr(r.uri,sizeof(r.uri),(char *)uri);r.layout=A.settings;
  if(oav_submit(&r,A.lastreq,sizeof(A.lastreq),err,sizeof(err))){A.job_active=1;status(err);return 1;}status(err);return 0;
@@ -199,7 +200,7 @@ static int do_trigger(ULONG id)
  if(!trigger_supported(id)){
   if(A.group==GID_ANIMATION&&(id==STM_PAUSE||id==STM_STOP)){
    struct adtStart a;a.MethodID=id==STM_PAUSE?ADTM_PAUSE:ADTM_STOP;a.asa_Frame=0;
-   if(DoDTMethodA(A.dto,A.win,NULL,(Msg)&a))return 1;
+   if(DoMethodA(A.dto,(Msg)&a))return 1;
   }
   status("This datatype does not advertise that playback/navigation action");return 0;
  }
@@ -293,7 +294,7 @@ static int window_create(void)
   WA_PubScreen,(ULONG)A.screen,WA_Activate,TRUE,WA_DragBar,TRUE,WA_CloseGadget,TRUE,WA_DepthGadget,TRUE,WA_SizeGadget,TRUE,
   WA_Left,10,WA_Top,26,WA_InnerWidth,760,WA_InnerHeight,500,WA_MinWidth,600,WA_MinHeight,360,
   WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_NEWSIZE|IDCMP_REFRESHWINDOW|IDCMP_IDCMPUPDATE|IDCMP_INTUITICKS|IDCMP_RAWKEY,
-  WINDOW_IDCMPHook,(ULONG)&A.idcmp_hook,WINDOW_IDCMPHookBits,IDCMP_IDCMPUPDATE|IDCMP_REFRESHWINDOW,
+  WINDOW_IDCMPHook,(ULONG)&A.idcmp_hook,WINDOW_IDCMPHookBits,IDCMP_IDCMPUPDATE|IDCMP_REFRESHWINDOW|IDCMP_INTUITICKS,
   WINDOW_Layout,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,LAYOUT_SpaceOuter,TRUE,LAYOUT_DeferLayout,TRUE,
    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
     LAYOUT_AddChild,(ULONG)(make_button("Open...",B_OPEN)),
@@ -348,11 +349,11 @@ int main(int argc,char **argv)
    switch(res&WMHI_CLASSMASK){case WMHI_CLOSEWINDOW:A.running=0;break;
    case WMHI_GADGETUP:action((int)(res&WMHI_GADGETMASK),NULL);break;
    case WMHI_NEWSIZE:reload();break;
-   case WMHI_INTUITICK:
-    if(++A.ticks>=10){A.ticks=0;if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){A.job_active=0;status(msg);scan_queue();}}}break;
+
    default:break;
    }
   }
+  if(A.poll_jobs){A.poll_jobs=0;if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){A.job_active=0;status(msg);scan_queue();}}}
   if(A.refresh&&A.dto){A.refresh=0;RefreshDTObjectA(A.dto,A.win,NULL,NULL);scroll_info();}
  }
  rc=0;
