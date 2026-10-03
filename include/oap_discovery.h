@@ -29,6 +29,7 @@ int oap_net_start(void);
 int oap_net_connect(const char *,unsigned);
 int oap_net_write(int,const void *,size_t);
 void oap_net_stop(void);
+void oap_net_close(int);
 int oap_query_pdf(const char *, OAPCaps *, char *, size_t);
 int oap_discover_run(const char *);
 int oap_receive_ipp(int, unsigned char *, size_t, size_t *, char *, size_t);

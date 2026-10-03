@@ -8,7 +8,7 @@ python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenAmigaPrintTool.info"
 "$CC" -m68000 -fno-common -O2 -Wall -Wextra -Wno-pointer-sign -noixemul -I"$ROOT/include" \
   -o "$OUT/OpenAmigaPrint" \
   "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
-  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/queue_ui.c" "$ROOT/src/amiga/main.c" -lamiga
+  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/queue_ui.c" "$ROOT/src/amiga/main.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" -lamiga
 file "$OUT/OpenAmigaPrint"
 wc -c "$OUT/OpenAmigaPrint"
 
@@ -34,3 +34,11 @@ wc -c "$OUT/oapprinttest"
 "$CC" -m68000 -fno-common -O2 -Wall -Wextra -Werror -noixemul -I"$ROOT/include" -o "$OUT/oapimagetest" "$ROOT/tests/oapimagetest.c" -lamiga
 file "$OUT/oapimagetest"
 wc -c "$OUT/oapimagetest"
+
+# Print dialogs require the asynchronous worker even without launching the viewer.
+"$CC" -m68000 -fno-common -O2 -Wall -Wextra -Werror -Wno-pointer-sign -Wno-misleading-indentation -noixemul -I"$ROOT/include" \
+  -o "$OUT/OAVWorker" \
+  "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_worker.c" \
+  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" \
+  "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/amiga/ipp_transport.c" -lamiga
+file "$OUT/OAVWorker"
