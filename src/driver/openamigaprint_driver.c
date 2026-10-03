@@ -215,7 +215,10 @@ void PRT_STDARGS oap_close(struct IORequest *ior)
 LONG PRT_STDARGS oap_conv(STRPTR buf,TEXT c,LONG crlf)
 {
     (void)buf;(void)crlf;
-    if(c=='\n')return -1;
+    /* Leave ESC/CSI to printer.device so ANSI commands such as ESC#1
+     * reach DoSpecial instead of leaking their printable tail into the PDF. */
+    if((UBYTE)c==0x1b || (UBYTE)c==0x9b)return -1;
+    if(c=='\n'){text_newline();return 0;}
     if(c=='\r')return 0;
     if(c=='\014'){end_page();return 0;}
     if(c=='\t'){text_char(' ');text_char(' ');text_char(' ');text_char(' ');return 0;}
@@ -233,7 +236,8 @@ LONG PRT_STDARGS oap_special(UWORD *command,UBYTE out[],BYTE *pos,BYTE *spacing,
     case aRIS:break;
     default:break;
     }
-    return -2;
+    /* All printer control commands are consumed here.  Never leak them into PDF. */
+    return 0;
 }
 static LONG render_preinit(struct IODRPReq *io,LONG flags)
 {
