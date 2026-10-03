@@ -5,6 +5,7 @@
 #include <exec/errors.h>
 #include <exec/execbase.h>
 #include <exec/io.h>
+#include <dos/dos.h>
 #include <devices/parallel.h>
 #include <proto/exec.h>
 #include "oap_spooler.h"

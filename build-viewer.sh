@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-CC=${AMIGA_CC:-/home/da1ek/ACNet-compat-lab/toolchain/amiga/bin/m68k-amigaos-gcc}
+CC=${AMIGA_CC:-$(command -v m68k-amigaos-gcc || echo m68k-amigaos-gcc)}   # set AMIGA_CC, or have it on PATH
 OUT="$ROOT/build/amigaos3"
 mkdir -p "$OUT"
 FLAGS='-m68000 -fno-common -O2 -Wall -Wextra -Werror -Wno-pointer-sign -Wno-misleading-indentation -noixemul'
