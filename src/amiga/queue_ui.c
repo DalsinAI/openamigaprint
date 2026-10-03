@@ -31,6 +31,31 @@ static int has_pdf_suffix(const char *s)
     size_t n=s?strlen(s):0;
     return n>4 && !strcmp(s+n-4,".pdf");
 }
+static long queue_file_size(const char *path)
+{
+    FILE *f=fopen(path,"rb");long n=-1;
+    if(!f)return -1;
+    if(!fseek(f,0,SEEK_END))n=ftell(f);
+    fclose(f);
+    return n;
+}
+static void queue_state(const char *pdf,char *state,size_t cap)
+{
+    char path[OAP_PATH_MAX],line[96];FILE *f;size_t n;strncpy(state,"queued",cap-1);state[cap-1]=0;
+    strncpy(path,pdf,sizeof(path)-1);path[sizeof(path)-1]=0;n=strlen(path);if(n<4)return;strcpy(path+n-4,".job");
+    f=fopen(path,"r");if(!f)return;while(fgets(line,sizeof(line),f)){if(!strncmp(line,"state=",6)){char *e;strncpy(state,line+6,cap-1);state[cap-1]=0;e=strchr(state,'\n');if(e)*e=0;break;}}fclose(f);
+}
+static void queue_label(char *dst,size_t cap,const char *file,const char *path)
+{
+    char base[40],state[20];long bytes=queue_file_size(path);size_t n=strlen(file);
+    if(n>4)n-=4;
+    if(n>=sizeof(base))n=sizeof(base)-1;
+    memcpy(base,file,n);base[n]=0;
+    queue_state(path,state,sizeof(state));
+    if(bytes>=1024L*1024L)snprintf(dst,cap,"%-12s %-9s %ld.%ld MB",base,state,bytes/(1024L*1024L),(bytes%(1024L*1024L))*10/(1024L*1024L));
+    else if(bytes>=1024)snprintf(dst,cap,"%-12s %-9s %ld KB",base,state,bytes/1024);
+    else snprintf(dst,cap,"%-12s %-9s %ld B",base,state,bytes<0?0:bytes);
+}
 static void clear_queue(void)
 {
     int i;
@@ -44,8 +69,8 @@ static void scan_queue(void)
     clear_queue();d=opendir(OAP_QUEUE_DIR);if(!d)return;
     while(q_count<OAP_QUEUE_MAX && (e=readdir(d))!=NULL){
         if(!has_pdf_suffix(e->d_name))continue;
-        strncpy(q_names[q_count],e->d_name,sizeof(q_names[q_count])-1);
         snprintf(q_paths[q_count],sizeof(q_paths[q_count]),"%s/%s",OAP_QUEUE_DIR,e->d_name);
+        queue_label(q_names[q_count],sizeof(q_names[q_count]),e->d_name,q_paths[q_count]);
         q_nodes[q_count].ln_Name=q_names[q_count];AddTail(&q_list,&q_nodes[q_count]);q_count++;
     }
     closedir(d);
