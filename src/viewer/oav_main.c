@@ -4,6 +4,7 @@
 #include "oav_jobs.h"
 #include "oap_queue.h"
 #include "oap.h"
+#include "oap_selection.h"
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <dos/dos.h>
@@ -65,6 +66,7 @@ static struct App {
  struct Hook idcmp_hook,render_hook;struct List qlist;QueueRow jobs[MAX_JOBS];
  OAVLayout settings;OAVPlacement placement;
  struct IBox paperbox,contentbox;ULONG group,natural_w,natural_h,whitepen;
+ OAPSelectionListener selection;
  char printer_saved[384];
  char path[OAV_PATH_MAX],lastreq[OAV_PATH_MAX],message[256],resultbuf[2048];
  int running,refresh,page,zoom,job_active,qcount,have_white,ticks,poll_jobs;
@@ -340,13 +342,18 @@ int main(int argc,char **argv)
  ULONG winsig=0,rexxsig=0,sig,res;UWORD code;char initial[OAV_PATH_MAX]={0};int rc=20;
  memset(&A,0,sizeof(A));NewList(&A.qlist);oav_layout_defaults(&A.settings);A.page=1;
  if(!libraries()){fputs("OpenAmigaView: missing ReAction or datatype classes (requires AmigaOS 3.2 class set)\n",stderr);goto out;}
- if(!window_create())goto out;A.running=1;scan_queue();
+ if(!window_create())goto out;oap_selection_open(&A.selection);A.running=1;scan_queue();
  if(argc>1)copystr(initial,sizeof(initial),argv[1]);
  else if(argc==0){struct WBStartup *w=(struct WBStartup *)argv;if(w->sm_NumArgs>1){NameFromLock(w->sm_ArgList[1].wa_Lock,(STRPTR)initial,sizeof(initial));AddPart((STRPTR)initial,w->sm_ArgList[1].wa_Name,sizeof(initial));}}
  if(initial[0])load_file(initial);
  GetAttr(WINDOW_SigMask,A.winobj,&winsig);GetAttr(AREXX_SigMask,A.rx,&rexxsig);
  while(A.running){
-  sig=Wait(winsig|rexxsig|SIGBREAKF_CTRL_C);if(sig&SIGBREAKF_CTRL_C)A.running=0;
+  sig=Wait(winsig|rexxsig|oap_selection_mask(&A.selection)|SIGBREAKF_CTRL_C);
+  {char chosen[384];if(oap_selection_receive(&A.selection,chosen,sizeof(chosen))){
+    strcpy(A.printer_saved,chosen);
+    SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)A.printer_saved,TAG_DONE);
+    status("Printer selection applied; Send verifies PDF support again");
+  }}if(sig&SIGBREAKF_CTRL_C)A.running=0;
   if(sig&rexxsig)RA_HandleRexx(A.rx);
   while((res=RA_HandleInput(A.winobj,&code))!=WMHI_LASTMSG){
    switch(res&WMHI_CLASSMASK){case WMHI_CLOSEWINDOW:A.running=0;break;
@@ -361,6 +368,7 @@ int main(int argc,char **argv)
  }
  rc=0;
 out:
+ oap_selection_close(&A.selection);
  close_content();if(A.winobj)DisposeObject(A.winobj);A.win=NULL;
  if(A.rx)DisposeObject(A.rx);if(ListBrowserBase)FreeListBrowserList(&A.qlist);
  if(A.have_white&&A.screen)ReleasePen(A.screen->ViewPort.ColorMap,A.whitepen);
