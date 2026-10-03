@@ -18,7 +18,7 @@ Selection is saved in `ENV:OpenAmigaPrint/PrinterURI` and `ENVARC:OpenAmigaPrint
 4. Set one copy and one-sided, then click Print once.
 5. An accepted IPP job-id is evidence of submission, not evidence of physical printing. Check the printer output before reporting an end-to-end pass. Do not repeatedly resend an uncertain submission.
 
-For image printing, launch OpenAmigaView, open the image, configure page layout, Add to queue, select the resulting PDF, Browse printers, then Send. This browser does not add missing document codecs or replace the viewer's rendering engine.
+For image printing, open the image in OpenAmigaView (or drop it on its window), set Paper, Turn and Size under Page setup, then choose Print... . The viewer makes the PDF and opens the same Print requester on it. This window does not add missing document codecs or replace the viewer's rendering engine.
 
 ## Build and tests
 

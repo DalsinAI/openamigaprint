@@ -122,6 +122,30 @@ static long file_size(const char *path)
     return n;
 }
 
+static const char *base_name(const char *path);
+/* A queued PDF's .job names what was printed ("title="); else the file's name. */
+static const char *job_title(const char *pdf)
+{
+    static char title[120];
+    char path[300], line[300];
+    size_t n = strlen(pdf);
+    FILE *f;
+    if (n > 4 && n < sizeof(path) && !strcmp(pdf + n - 4, ".pdf")) {
+        strcpy(path, pdf);
+        strcpy(path + n - 4, ".job");
+        if ((f = fopen(path, "r"))) {
+            while (fgets(line, sizeof(line), f))
+                if (!strncmp(line, "title=", 6) && line[6] && line[6] != '\n') {
+                    line[strcspn(line, "\r\n")] = 0;
+                    copy(title, sizeof(title), line + 6);
+                    fclose(f);
+                    return title;
+                }
+            fclose(f);
+        }
+    }
+    return base_name(pdf);
+}
 static const char *base_name(const char *path)
 {
     const char *p = FilePart((STRPTR)path);
@@ -669,7 +693,7 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
     if (!R.screen)
         goto out;
     R.dri = GetScreenDrawInfo(R.screen);
-    snprintf(title, sizeof(title), "Print: %s", base_name(pdf));
+    snprintf(title, sizeof(title), "Print: %s", job_title(pdf));
 
     /* start on the printer the job asked for, else the default */
     copy(start, sizeof(start), o->printer_uri);
