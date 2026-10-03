@@ -113,7 +113,7 @@ OpenAmigaPrint now treats completed printer jobs as durable queue entries rather
 
 - Install `OAPSpooler` as a Workbench-startup tool (`SYS:WBStartup/OAPSpooler`) with `DONOTWAIT`.
 - The spooler stores completed jobs under `SYS:Spool/OpenAmigaPrint/` as a PDF spool artifact plus a `.job` metadata record.
-- Run `OpenAmigaPrint` with no arguments (or `OpenAmigaPrint QUEUE`) to open the native queue window.
+- Install `OpenAmigaPrint` plus `OpenAmigaPrintTool.info` as `SYS:Tools/OpenAmigaPrint` and `SYS:Tools/OpenAmigaPrint.info`. Double-click it, or run `OpenAmigaPrint` with no arguments (or `OpenAmigaPrint QUEUE`), to open the native queue window.
 - Selecting **Open** on a queued job opens the native per-job window, where the job can be saved/exported or sent to an IPP printer.
 - `OAPImageTest` exercises the real `PRD_DUMPRPORT` graphics path. By default it prints a full-width, aspect-correct, centered colour test card; pass `1TO1` for a diagnostic unscaled dump.
 
