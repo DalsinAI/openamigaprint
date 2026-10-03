@@ -27,3 +27,7 @@ wc -c "$OUT/OpenAmigaPrint.driver"
 "$CC" -m68000 -O2 -Wall -Wextra -Werror -noixemul   -o "$OUT/oapprinttest" "$ROOT/tests/oapprinttest.c"
 file "$OUT/oapprinttest"
 wc -c "$OUT/oapprinttest"
+
+python3 "$ROOT/tools/make_oap_icon.py" "$OUT/OpenAmigaPrint.info"
+file "$OUT/OpenAmigaPrint.info"
+wc -c "$OUT/OpenAmigaPrint.info"
