@@ -8,7 +8,7 @@ python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenAmigaPrintTool.info"
 "$CC" -m68000 -O2 -Wall -Wextra -Wno-pointer-sign -noixemul -I"$ROOT/include" \
   -o "$OUT/OpenAmigaPrint" \
   "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
-  "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/queue_ui.c" "$ROOT/src/amiga/main.c" -lamiga
+  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/queue_ui.c" "$ROOT/src/amiga/main.c" -lamiga
 file "$OUT/OpenAmigaPrint"
 wc -c "$OUT/OpenAmigaPrint"
 

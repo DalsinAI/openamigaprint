@@ -33,6 +33,8 @@ int oap_pdf_write_demo(const char *path, const char *title);
 int oap_ipp_submit_pdf(const char *pdf_path,const OAPJobOptions *o,char *status,size_t status_len);
 int oap_run_print_dialog(const char *pdf_path,OAPJobOptions *o);
 int oap_run_queue_window(void);
+int oap_selected_printer(char *uri,size_t capacity);
+int oap_launch_printer_browser(void);
 #endif
 
 #endif

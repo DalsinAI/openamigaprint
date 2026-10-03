@@ -3,6 +3,7 @@
 #include "oav_core.h"
 #include "oav_jobs.h"
 #include "oap_queue.h"
+#include "oap.h"
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <dos/dos.h>
@@ -55,7 +56,7 @@ struct Library *ButtonBase,*StringBase,*SpaceBase,*ListBrowserBase,*ScrollerBase
 #define MAX_JOBS 128
 #define REG(r,t) register t __asm(#r)
 enum { B_OPEN=1,B_PAGE,B_FIT,B_ONE,B_MINUS,B_PLUS,B_PLAY,B_PAUSE,B_STOP,B_PREV,B_NEXT,
- B_PAPER,B_ORIENT,B_SCALE,B_EXPORT,B_PRINT,B_QOPEN,B_REFRESH,B_SEND,B_CANCEL,B_INFO,B_LIST,B_VSCROLL,B_HSCROLL,B_URI,B_STATUS,B_FILE,B_QUIT };
+ B_PAPER,B_ORIENT,B_SCALE,B_EXPORT,B_PRINT,B_QOPEN,B_REFRESH,B_SEND,B_CANCEL,B_INFO,B_LIST,B_VSCROLL,B_HSCROLL,B_URI,B_STATUS,B_FILE,B_QUIT,B_BROWSE };
 typedef struct QueueRow { char name[128],path[OAV_PATH_MAX],state[32]; } QueueRow;
 static struct App {
  Object *winobj,*dto,*space,*status,*file,*qg,*uri,*vscroll,*hscroll,*rx;
@@ -64,6 +65,7 @@ static struct App {
  struct Hook idcmp_hook,render_hook;struct List qlist;QueueRow jobs[MAX_JOBS];
  OAVLayout settings;OAVPlacement placement;
  struct IBox paperbox,contentbox;ULONG group,natural_w,natural_h,whitepen;
+ char printer_saved[384];
  char path[OAV_PATH_MAX],lastreq[OAV_PATH_MAX],message[256],resultbuf[2048];
  int running,refresh,page,zoom,job_active,qcount,have_white,ticks,poll_jobs;
 } A;
@@ -223,6 +225,7 @@ static int action(int id,const char *arg)
  case B_PRINT:return start_job("queue",NULL,NULL);
  case B_QOPEN:i=selected();if(i>=0)return load_file(A.jobs[i].path);status("Select a queued job first");return 0;
  case B_REFRESH:scan_queue();return 1;
+ case B_BROWSE:status(oap_launch_printer_browser()?"Choose a verified PDF printer in Browse":"Cannot launch C:OAPPrinters");return 1;
  case B_SEND:i=selected();if(i>=0)return start_job("send",NULL,A.jobs[i].path);status("Select a queued PDF and enter its IPP destination");return 0;
  case B_CANCEL:if(A.job_active&&oav_cancel(A.lastreq)){status("Cancellation requested; worker stops at next safe decode boundary");return 1;}status("No cancellable render is active");return 0;
  case B_PLAY:return do_trigger(STM_PLAY);case B_PAUSE:return do_trigger(STM_PAUSE);case B_STOP:return do_trigger(STM_STOP);
@@ -326,8 +329,8 @@ static int window_create(void)
     LAYOUT_AddChild,(ULONG)(A.paper=make_button("A4",B_PAPER)),LAYOUT_AddChild,(ULONG)(A.orient=make_button("Portrait",B_ORIENT)),LAYOUT_AddChild,(ULONG)(A.scalemode=make_button("Fit to page",B_SCALE)),
     LAYOUT_AddChild,(ULONG)(make_button("Save PDF...",B_EXPORT)),LAYOUT_AddChild,(ULONG)(make_button("Add to queue",B_PRINT)),LAYOUT_AddChild,(ULONG)(make_button("Cancel job",B_CANCEL)),
    TAG_DONE)),CHILD_WeightedHeight,0,
-   LAYOUT_AddChild,(ULONG)(A.uri=NewObject(STRING_GetClass(),NULL,GA_ID,B_URI,STRINGA_MaxChars,384,STRINGA_MinVisible,40,STRINGA_TextVal,(ULONG)"",GA_RelVerify,TRUE,TAG_DONE)),CHILD_WeightedHeight,0,
-   LAYOUT_AddChild,(ULONG)(A.status=NewObject(STRING_GetClass(),NULL,GA_ReadOnly,TRUE,STRINGA_MaxChars,256,STRINGA_MinVisible,40,STRINGA_TextVal,(ULONG)"IPP destination above must support PDF. Add to queue does not send paper.",TAG_DONE)),CHILD_WeightedHeight,0,
+   LAYOUT_AddChild,(ULONG)NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,LAYOUT_AddChild,(ULONG)(A.uri=NewObject(STRING_GetClass(),NULL,GA_ID,B_URI,STRINGA_MaxChars,384,STRINGA_MinVisible,30,STRINGA_TextVal,(ULONG)"",GA_RelVerify,TRUE,TAG_DONE)),LAYOUT_AddChild,(ULONG)make_button("Browse printers...",B_BROWSE),CHILD_WeightedWidth,0,TAG_DONE),CHILD_WeightedHeight,0,
+   LAYOUT_AddChild,(ULONG)(A.status=NewObject(STRING_GetClass(),NULL,GA_ReadOnly,TRUE,STRINGA_MaxChars,256,STRINGA_MinVisible,40,STRINGA_TextVal,(ULONG)"Browse verifies PDF support. Add to queue does not send paper.",TAG_DONE)),CHILD_WeightedHeight,0,
   TAG_DONE)),
  TAG_DONE);
  if(!A.winobj)return 0;A.win=RA_OpenWindow(A.winobj);return A.win!=NULL;
@@ -353,7 +356,7 @@ int main(int argc,char **argv)
    default:break;
    }
   }
-  if(A.poll_jobs){A.poll_jobs=0;if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){A.job_active=0;status(msg);scan_queue();}}}
+  if(A.poll_jobs){char selected_printer[384];A.poll_jobs=0;if(oap_selected_printer(selected_printer,sizeof(selected_printer))&&strcmp(selected_printer,A.printer_saved)){strcpy(A.printer_saved,selected_printer);SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)selected_printer,TAG_DONE);status("PDF printer selected; Send rechecks its capabilities");}if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){A.job_active=0;status(msg);scan_queue();}}}
   if(A.refresh&&A.dto){A.refresh=0;RefreshDTObjectA(A.dto,A.win,NULL,NULL);scroll_info();}
  }
  rc=0;
