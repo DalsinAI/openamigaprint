@@ -191,9 +191,16 @@ static void set_density(ULONG flags)
     default:g_dpi=300;break;
     }
 }
-void PRT_STDARGS oap_init(struct PrinterData *pd)
+LONG PRT_STDARGS oap_init(struct PrinterData *pd)
 {
+    /*
+     * The published PrinterExtendedData prototype declares ped_Init VOID,
+     * but AmigaOS 3.2.x printer.device tests D0 after calling it and treats
+     * a non-zero value as unit-initialisation failure.  Do not let a C tail
+     * call leak geometry()/reset_state()'s working value into D0.
+     */
     PD=pd;SysBase=pd->pd_Device.dd_ExecBase;reset_state();
+    return 0;
 }
 void PRT_STDARGS oap_expunge(void){PD=0;}
 int PRT_STDARGS oap_open(struct IORequest *ior)
