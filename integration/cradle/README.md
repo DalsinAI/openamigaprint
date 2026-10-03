@@ -29,7 +29,20 @@ nine policy/live tests passed. The canonical host suite passed 22 tests. The
 OpenAmigaPrint codec suite passed 942 checks, and the send-failure injection test
 proved that a blocked query produces a completed error, not an empty success.
 
-Native acceptance is NOT yet complete. After deployment, one Instance-23 restart
-showed a C:ACClip software failure; the native discovery retest then stalled while
-opening bsdsocket.library. These are observations, not a claim that ACClip is the
-cause of the network-library stall. No physical printing was attempted.
+An initial Instance-23 retest showed a C:ACClip software failure and a stall
+while opening bsdsocket.library. Their relationship was not established.
+
+Subsequent native scans succeeded after restarting and reopening the browser:
+- The first captured ReAction result showed four endpoints, 12 replies parsed,
+  and one confirmed PDF printer: HP ColorLaserJet MFP M282-M285.
+- Show all in a subsequent native browser showed six endpoints, 14 replies
+  parsed, and all three physical printers (IPP/IPPS advertisements).
+- The colour HP's plain-IPP endpoint was confirmed ready with PDF support.
+- Other endpoints remained unverified where connection checks timed out or
+  TLS was unavailable; they were not incorrectly labelled PDF-capable.
+- The native Print dialog then showed the selected numerical IPP destination.
+
+This confirms native discovery and visible capability gating, not physical
+printing or stable startup across every run. No automated Print-Job was sent
+by these discovery/policy checks. A later visible Print dialog showed sending;
+physical completion has not been independently checked.
