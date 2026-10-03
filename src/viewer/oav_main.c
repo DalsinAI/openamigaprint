@@ -84,6 +84,7 @@ static struct App {
  int running,refresh,page,zoom,job_active,qcount,have_white,ticks,poll_jobs;
 } A;
 static void page_setup_applies(int yes);
+static int is_pdf(const char *path){const char *ext=strrchr(path,'.');return ext&&!strcasecmp(ext,".pdf");}
 static void copystr(char *d,size_t n,const char *s){if(n){strncpy(d,s,n-1);d[n-1]=0;}}
 static void status(const char *s)
 {copystr(A.message,sizeof(A.message),s);if(A.win&&A.status)SetGadgetAttrs((struct Gadget *)A.status,A.win,NULL,GA_Text,(ULONG)A.message,TAG_DONE);}
@@ -113,10 +114,25 @@ static ULONG render_hook(REG(a0,struct Hook *h),REG(a2,Object *o),REG(a1,struct 
   RectFill(r->gpr_RPort,A.paperbox.Left-1,A.paperbox.Top-1,A.paperbox.Left+A.paperbox.Width,A.paperbox.Top+A.paperbox.Height);
   SetAPen(r->gpr_RPort,A.whitepen);RectFill(r->gpr_RPort,A.paperbox.Left,A.paperbox.Top,A.paperbox.Left+A.paperbox.Width-1,A.paperbox.Top+A.paperbox.Height-1);
  }
+ if(!A.dto&&A.path[0]&&is_pdf(A.path)){       /* a PDF with nothing to show it: say so where the page would be */
+  static const char *lines[2]={"This PDF can't be shown here.","Print... still prints it."};
+  struct RastPort *rp=r->gpr_RPort;int i;
+  SetAPen(rp,A.drawinfo?A.drawinfo->dri_Pens[TEXTPEN]:1);SetDrMd(rp,JAM1);
+  for(i=0;i<2;i++){WORD len=(WORD)strlen(lines[i]),tw=(WORD)TextLength(rp,(STRPTR)lines[i],len);
+   Move(rp,b->Left+(b->Width-tw)/2,b->Top+b->Height/2+(i*2-1)*rp->TxHeight+rp->TxBaseline/2);Text(rp,(STRPTR)lines[i],len);}
+ }
  A.refresh=1;return 0;
 }
 static void close_content(void)
 {if(A.dto){if(A.win)RemoveDTObject(A.win,A.dto);DisposeDTObject(A.dto);A.dto=NULL;}A.group=0;}
+static void pdf_not_shown(const char *path)
+{
+ char msg[256];
+ close_content();A.paperbox.Width=0;page_setup_applies(0);copystr(A.path,sizeof(A.path),path);
+ snprintf(A.title,sizeof(A.title),"OpenAmigaView: %.120s",FilePart((STRPTR)path));SetAttrs(A.winobj,WA_Title,(ULONG)A.title,TAG_DONE);
+ snprintf(msg,sizeof(msg),"%.40s: can't be shown (no PDF datatype). Print... still prints it.",FilePart((STRPTR)path));
+ status(msg);RefreshGList((struct Gadget *)A.space,A.win,NULL,1);
+}
 static int load_file(const char *path)
 {
  Object *dto;struct DataType *dt=NULL;struct IBox *area=NULL;struct BitMapHeader *bmh=NULL;
@@ -129,16 +145,17 @@ static int load_file(const char *path)
  status("Loading datatype...");
  dto=NewDTObject((APTR)path,DTA_SourceType,DTST_FILE,ICA_TARGET,ICTARGET_IDCMP,PDTA_DestMode,PMODE_V43,PDTA_Screen,(ULONG)A.screen,PDTA_Remap,TRUE,AGA_Secure,TRUE,DTA_ControlPanel,TRUE,GA_ID,1000,TAG_DONE);
  if(!dto){
-  LONG err=IoErr();const char *ext=strrchr(path,'.');const char *name=FilePart((STRPTR)path);
-  if(ext&&!strcasecmp(ext,".pdf"))snprintf(msg,sizeof(msg),"%.60s: no PDF datatype is installed. Use Print to print it with OpenAmigaPrint, or install a PDF datatype.",name);
-  else if(err==ERROR_OBJECT_WRONG_TYPE||err==2000)snprintf(msg,sizeof(msg),"%.60s: no datatype on this Amiga can open this kind of file",name);
+  LONG err=IoErr();const char *name=FilePart((STRPTR)path);
+  if(is_pdf(path)){pdf_not_shown(path);return 1;}
+  if(err==ERROR_OBJECT_WRONG_TYPE||err==2000)snprintf(msg,sizeof(msg),"%.60s: no datatype on this Amiga can open this kind of file",name);
   else snprintf(msg,sizeof(msg),"%.60s couldn't be opened (DOS error %ld)",name,(long)err);
-  copystr(A.path,sizeof(A.path),path);status(msg);return 0;}
+  status(msg);return 0;}
  memset(&fi,0,sizeof(fi));memset(&frame,0,sizeof(frame));
  frame.MethodID=DTM_FRAMEBOX;frame.dtf_ContentsInfo=&fi;frame.dtf_FrameInfo=&fi;frame.dtf_SizeFrameInfo=sizeof(fi);
  DoDTMethodA(dto,NULL,NULL,(Msg)&frame);
  GetDTAttrs(dto,DTA_DataType,(ULONG)&dt,DTA_NominalHoriz,(ULONG)&w,DTA_NominalVert,(ULONG)&h,TAG_DONE);
  if(dt&&dt->dtn_Header)group=dt->dtn_Header->dth_GroupID;
+ if(is_pdf(path)&&group!=GID_DOCUMENT&&group!=GID_PICTURE){DisposeDTObject(dto);pdf_not_shown(path);return 1;}   /* e.g. ascii.datatype showing PDF source */
  if(group==GID_PICTURE){GetDTAttrs(dto,PDTA_BitMapHeader,(ULONG)&bmh,TAG_DONE);if(bmh){w=bmh->bmh_Width;h=bmh->bmh_Height;}}
  if(!w)w=1;if(!h)h=1;
  if(group==GID_PICTURE&&w>OAV_PIXEL_LIMIT/h){DisposeDTObject(dto);status("Picture exceeds 16 megapixel preview limit");return 0;}
@@ -182,7 +199,8 @@ static int load_file(const char *path)
  /* animations and sounds bring their own player bar (DTA_ControlPanel);
   * page setup is for pictures, the only thing laid out on paper here */
  page_setup_applies(group==GID_PICTURE);
- snprintf(msg,sizeof(msg),"%.60s \xb7 %s, %lu \xd7 %lu%s",FilePart((STRPTR)path),dt&&dt->dtn_Header?(char *)dt->dtn_Header->dth_Name:"Datatype",(unsigned long)w,(unsigned long)h,group==GID_ANIMATION?" \xb7 animation":"");
+ if(group==GID_PICTURE||group==GID_ANIMATION)snprintf(msg,sizeof(msg),"%.60s \xb7 %s, %lu \xd7 %lu%s",FilePart((STRPTR)path),dt&&dt->dtn_Header?(char *)dt->dtn_Header->dth_Name:"Datatype",(unsigned long)w,(unsigned long)h,group==GID_ANIMATION?" \xb7 animation":"");
+ else snprintf(msg,sizeof(msg),"%.60s \xb7 %s",FilePart((STRPTR)path),dt&&dt->dtn_Header?(char *)dt->dtn_Header->dth_Name:"Datatype");
  status(msg);RefreshGList((struct Gadget *)A.space,A.win,NULL,1);A.refresh=1;return 1;
 }
 static void reload(void){char path[OAV_PATH_MAX];if(!A.path[0])return;copystr(path,sizeof(path),A.path);load_file(path);}
@@ -263,7 +281,8 @@ static int action(int id,const char *arg)
  case B_PAPER:if(arg)A.settings.paper=!A.settings.paper;else{GetAttr(CHOOSER_Selected,A.paper,&v);A.settings.paper=v?OAV_LETTER:OAV_A4;}SetGadgetAttrs((struct Gadget *)A.paper,A.win,NULL,CHOOSER_Selected,A.settings.paper?1:0,TAG_DONE);reload();return 1;
  case B_ORIENT:if(arg)A.settings.landscape=!A.settings.landscape;else{GetAttr(CHOOSER_Selected,A.orient,&v);A.settings.landscape=v!=0;}SetGadgetAttrs((struct Gadget *)A.orient,A.win,NULL,CHOOSER_Selected,A.settings.landscape?1:0,TAG_DONE);reload();return 1;
  case B_SCALE:if(arg)A.settings.scale=!A.settings.scale;else{GetAttr(CHOOSER_Selected,A.scalemode,&v);A.settings.scale=v?OAV_FILL:OAV_FIT;}SetGadgetAttrs((struct Gadget *)A.scalemode,A.win,NULL,CHOOSER_Selected,A.settings.scale?1:0,TAG_DONE);reload();return 1;
- case B_EXPORT:if(arg)return start_job("export",arg,NULL);if(choose_file(path,1))return start_job("export",path,NULL);return 0;
+ case B_EXPORT:if(!A.dto||A.group!=GID_PICTURE){status(is_pdf(A.path)?"This is already a PDF: Print... can also save it elsewhere":"Save as PDF... makes a PDF from a picture; open one first");return 0;}
+  if(arg)return start_job("export",arg,NULL);if(choose_file(path,1))return start_job("export",path,NULL);return 0;
  case B_PRINT:return start_job("queue",NULL,NULL);
  case B_PRINTDLG:return print_dialog();
  case B_QOPEN:i=selected();if(i>=0)return load_file(A.jobs[i].path);status("Select a queued job first");return 0;
