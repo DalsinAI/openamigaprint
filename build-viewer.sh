@@ -18,3 +18,7 @@ p=Path(sys.argv[1]); data=bytearray(p.read_bytes());struct.pack_into('>I',data,7
 PYICON
 file "$OUT/OpenAmigaView" "$OUT/OAVWorker" "$OUT/OpenAmigaView.info"
 sha256sum "$OUT/OpenAmigaView" "$OUT/OAVWorker" > "$OUT/VIEWER_SHA256SUMS.txt"
+
+# No-network guest request/worker regression helper.
+"$CC" $FLAGS -I"$ROOT/include" -o "$OUT/OAVRequestSmoke" \
+ "$ROOT/tests/oav_request_smoke.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_core.c" -lamiga

@@ -59,3 +59,7 @@ the colour HP as PDF confirmed/ready, and Show all subsequently showed six
 IPP/IPPS endpoints across the two HPs and Epson. Network startup was intermittent
 during testing; see integration/cradle/README.md for the failure and recovery
 sequence. Physical job completion is still a separate, unverified gate.
+
+## Print-window crash recovery
+
+See `PRINT_RECOVERY_AND_DOCUMENTS.md`. Print submission now uses `C:OAVWorker`; install it with the matching application build. Recovery, request-option preservation and host transport tests do not constitute a physical-print pass.

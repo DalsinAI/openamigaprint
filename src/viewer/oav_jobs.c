@@ -26,7 +26,8 @@ int oav_submit(const OAVRequest *r,char *request,size_t cap,char *err,size_t err
  }
  if(i==100){copystr(err,errcap,"Cannot allocate a unique job ID");return 0;}
  f=fdopen(fd,"w");if(!f){close(fd);remove(path);copystr(err,errcap,"Cannot write request");return 0;}
- fprintf(f,"schema=2\naction=%s\nsource=%s\noutput=%s\nuri=%s\npaper=%d\nlandscape=%d\nscale=%d\nmargin_cpt=%ld\n",r->action,r->source,r->output,r->uri,r->layout.paper,r->layout.landscape,r->layout.scale,r->layout.margin_cpt);
+ fprintf(f,"schema=3\naction=%s\nsource=%s\noutput=%s\nuri=%s\npaper=%d\nlandscape=%d\nscale=%d\nmargin_cpt=%ld\n",r->action,r->source,r->output,r->uri,r->layout.paper,r->layout.landscape,r->layout.scale,r->layout.margin_cpt);
+ if(r->has_print_options)fprintf(f,"print_options=1\ncopies=%d\nprint_paper=%d\norientation=%d\ncolor=%d\nduplex=%d\npage_start=%d\npage_end=%d\n",r->print.copies,r->print.paper,r->print.orientation,r->print.color,r->print.duplex,r->print.page_start,r->print.page_end);
  {int bad=ferror(f);if(fclose(f))bad=1;if(bad){remove(path);copystr(err,errcap,"Request write failed");return 0;}}
  snprintf(cmd,sizeof(cmd),"Stack 65536\nC:OAVWorker %s",path);
  rc=SystemTags((STRPTR)cmd,SYS_Asynch,TRUE,NP_StackSize,65536,SYS_InName,(ULONG)"NIL:",SYS_OutName,(ULONG)"NIL:",TAG_DONE);
@@ -36,7 +37,7 @@ int oav_submit(const OAVRequest *r,char *request,size_t cap,char *err,size_t err
 int oav_read_request(const char *path,OAVRequest *r)
 {
  FILE *f=fopen(path,"r");char line[1024];int schema=0;if(!f)return 0;
- memset(r,0,sizeof(*r));oav_layout_defaults(&r->layout);
+ memset(r,0,sizeof(*r));oav_layout_defaults(&r->layout);r->print.copies=1;r->print.color=OAP_COLOR;
  while(fgets(line,sizeof(line),f)){
   char *v=strchr(line,'='),*e;if(!v)continue;*v++=0;e=strpbrk(v,"\r\n");if(e)*e=0;
   if(!strcmp(line,"schema"))schema=atoi(v);
@@ -48,8 +49,17 @@ int oav_read_request(const char *path,OAVRequest *r)
   else if(!strcmp(line,"landscape"))r->layout.landscape=atoi(v);
   else if(!strcmp(line,"scale"))r->layout.scale=atoi(v);
   else if(!strcmp(line,"margin_cpt"))r->layout.margin_cpt=strtol(v,NULL,10);
+  else if(!strcmp(line,"print_options"))r->has_print_options=atoi(v)==1;
+  else if(!strcmp(line,"copies"))r->print.copies=atoi(v);
+  else if(!strcmp(line,"print_paper"))r->print.paper=atoi(v);
+  else if(!strcmp(line,"orientation"))r->print.orientation=atoi(v);
+  else if(!strcmp(line,"color"))r->print.color=atoi(v);
+  else if(!strcmp(line,"duplex"))r->print.duplex=atoi(v);
+  else if(!strcmp(line,"page_start"))r->print.page_start=atoi(v);
+  else if(!strcmp(line,"page_end"))r->print.page_end=atoi(v);
  }
- fclose(f);return schema==2&&oav_safe_field(r->source);
+ fclose(f);if(r->has_print_options&&(r->print.copies<1||r->print.copies>999||r->print.paper<0||r->print.paper>1||r->print.orientation<0||r->print.orientation>1||r->print.color<0||r->print.color>1||r->print.duplex<0||r->print.duplex>2||r->print.page_start<0||r->print.page_end<r->print.page_start))return 0;
+ return (schema==2||schema==3)&&oav_safe_field(r->source);
 }
 int oav_result(const char *req,char *state,size_t statecap,char *msg,size_t msgcap)
 {
@@ -68,4 +78,22 @@ int oav_cancel(const char *req)
  char p[OAV_PATH_MAX+16];FILE *f;
  if(!req||strncmp(req,OAV_REQUEST_DIR "/v-",strlen(OAV_REQUEST_DIR "/v-")))return 0;
  snprintf(p,sizeof(p),"%s.cancel",req);f=fopen(p,"w");if(!f)return 0;fputs("cancel\n",f);return fclose(f)==0;
+}
+
+int oav_result_terminal(const char *s)
+{
+ return s&&(!strcmp(s,"ready")||!strcmp(s,"submitted")||!strcmp(s,"error")||!strcmp(s,"uncertain")||!strcmp(s,"cancelled"));
+}
+int oav_update_queue_state(const char *pdf,const char *state,const char *uri,const char *message)
+{
+ char path[OAV_PATH_MAX+16],tmp[OAV_PATH_MAX+24],line[1024];FILE *in,*out;size_t n;int bad=0;
+ if(!pdf||strncmp(pdf,OAP_QUEUE_DIR "/",strlen(OAP_QUEUE_DIR "/")))return 1;
+ n=strlen(pdf);if(n<4||n>=OAV_PATH_MAX||strcmp(pdf+n-4,".pdf"))return 0;
+ strcpy(path,pdf);strcpy(path+n-4,".job");snprintf(tmp,sizeof(tmp),"%s.tmp",path);
+ in=fopen(path,"r");out=fopen(tmp,"w");if(!out){if(in)fclose(in);return 0;}
+ if(in){while(fgets(line,sizeof(line),in)){if(strncmp(line,"state=",6)&&strncmp(line,"printer=",8)&&strncmp(line,"message=",8))fputs(line,out);}if(ferror(in))bad=1;fclose(in);}
+ else fprintf(out,"pdf=%s\n",pdf);
+ fprintf(out,"state=%s\nprinter=%s\nmessage=%s\n",state,uri?uri:"",message?message:"");
+ if(ferror(out))bad=1;if(fclose(out))bad=1;if(bad){remove(tmp);return 0;}
+ remove(path);if(rename(tmp,path)){remove(tmp);return 0;}return 1;
 }

@@ -34,6 +34,7 @@ struct Library *SocketBase;
 #define nonblock(s,p) ioctl(s,FIONBIO,p)
 #define select_sock(n,r,w,e,t) select(n,r,w,e,t)
 #endif
+void oap_net_close(int fd){if(fd>=0)close_sock(fd);}
 int oap_net_start(void){
 #ifdef __amigaos__
  if(!SocketBase)SocketBase=OpenLibrary((STRPTR)"bsdsocket.library",4);return SocketBase!=NULL;

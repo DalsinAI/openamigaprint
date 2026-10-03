@@ -44,7 +44,24 @@ static void result(const char *req,const char *state,const char *msg)
 {
  char path[OAV_PATH_MAX+20],temp[OAV_PATH_MAX+24];FILE *f;
  snprintf(path,sizeof(path),"%s.result",req);snprintf(temp,sizeof(temp),"%s.tmp",path);
- f=fopen(temp,"w");if(!f)return;fprintf(f,"state=%s\nmessage=%s\n",state,msg);if(fclose(f)){remove(temp);return;}rename(temp,path);
+ f=fopen(temp,"w");if(!f)return;fprintf(f,"state=%s\nmessage=%s\n",state,msg);if(fclose(f)){remove(temp);return;}remove(path);rename(temp,path);
+}
+typedef struct PrintProgress {
+ const char *request,*source,*uri;
+ Pixels cancel;
+ unsigned long last_bytes;
+ char stage[32];
+} PrintProgress;
+static int print_progress(void *opaque,const char *stage,unsigned long sent,unsigned long total)
+{
+ PrintProgress *p=opaque;char text[240];int changed=strcmp(stage,p->stage)!=0;
+ if(is_cancelled(&p->cancel))return 0;
+ if(!changed&&sent<p->last_bytes+524288UL&&sent!=total)return 1;
+ if(!strcmp(stage,"uploading"))snprintf(text,sizeof(text),"Uploading %lu%% (%lu / %lu KiB)",total?(sent==total?100UL:sent/(total/100UL+1)):0UL,sent/1024UL,total/1024UL);
+ else snprintf(text,sizeof(text),"%s",!strcmp(stage,"checking")?"Checking printer PDF capability":!strcmp(stage,"connecting")?"Connecting to selected printer":!strcmp(stage,"awaiting-reply")?"Upload complete; waiting for printer job ID":"Preparing PDF submission");
+ result(p->request,stage,text);
+ if(changed)oav_update_queue_state(p->source,stage,p->uri,text);
+ strncpy(p->stage,stage,sizeof(p->stage)-1);p->last_bytes=sent;return 1;
 }
 static int copyfile(const char *from,const char *to)
 {
@@ -66,11 +83,16 @@ int main(int argc,char **argv)
  if(!oav_read_request(argv[1],&r)){result(argv[1],"error","Invalid job request");return 20;}
  snprintf(px.cancel,sizeof(px.cancel),"%s.cancel",argv[1]);
  if(!strcmp(r.action,"send")){
-  OAPJobOptions o;OAPUri u;oap_job_defaults(&o);
-  if(!oap_parse_ipp_uri(r.uri,&u)){result(argv[1],"error","Invalid IPP URI; IPPS not enabled in this build");return 20;}
-  strncpy(o.printer_uri,r.uri,sizeof(o.printer_uri)-1);
-  ok=oap_ipp_submit_pdf(r.source,&o,msg,sizeof(msg));
-  result(argv[1],ok?"submitted":"error",ok?"IPP accepted submission; physical completion is not yet monitored":msg);return ok?0:20;
+  static OAPJobOptions o;static PrintProgress progress;
+  const char *state;int rc;
+  oap_job_defaults(&o);if(r.has_print_options)o=r.print;
+  strncpy(o.printer_uri,r.uri,sizeof(o.printer_uri)-1);o.printer_uri[sizeof(o.printer_uri)-1]=0;
+  memset(&progress,0,sizeof(progress));progress.request=argv[1];progress.source=r.source;progress.uri=r.uri;
+  snprintf(progress.cancel.cancel,sizeof(progress.cancel.cancel),"%s.cancel",argv[1]);
+  rc=oap_ipp_submit_pdf_ex(r.source,&o,msg,sizeof(msg),print_progress,&progress);
+  state=rc==OAP_SEND_ACCEPTED?"submitted":rc==OAP_SEND_UNCERTAIN?"uncertain":rc==OAP_SEND_CANCELLED?"cancelled":"error";
+  oav_update_queue_state(r.source,state,r.uri,msg);result(argv[1],state,msg);
+  return rc==OAP_SEND_ACCEPTED?0:rc==OAP_SEND_CANCELLED?5:20;
  }
  snprintf(snapshot,sizeof(snapshot),"%s.source",argv[1]);
  if(!copyfile(r.source,snapshot)){result(argv[1],"error","Cannot snapshot source, or file exceeds 64 MiB limit");return 20;}
