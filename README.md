@@ -79,6 +79,7 @@ C/OAPPrintTest            -> C:OAPPrintTest
 C/OAPSpoolTest            -> C:OAPSpoolTest
 Devs/oapspool.device      -> DEVS:oapspool.device
 Devs/Printers/OpenAmigaPrint -> DEVS:Printers/OpenAmigaPrint
+OpenAmigaPrint.info         -> DEVS:Printers/OpenAmigaPrint.info
 ```
 
 In **Printer Preferences** select:
