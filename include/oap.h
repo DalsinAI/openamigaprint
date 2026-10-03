@@ -22,6 +22,7 @@ enum { OAP_SIMPLEX = 0, OAP_DUPLEX_LONG = 1, OAP_DUPLEX_SHORT = 2 };
 typedef struct OAPUri {
     char host[256];
     unsigned short port;
+    int secure;
     char path[384];
 } OAPUri;
 

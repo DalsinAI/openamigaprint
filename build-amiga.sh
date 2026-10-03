@@ -2,12 +2,24 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 CC=${AMIGA_CC:-/home/da1ek/ACNet-compat-lab/toolchain/amiga/bin/m68k-amigaos-gcc}
+AMISSL_SDK=${AMISSL_SDK:-}
 OUT="$ROOT/build/amigaos3"
 mkdir -p "$OUT"
-"$CC" -m68000 -O2 -Wall -Wextra -Wno-pointer-sign -noixemul -I"$ROOT/include" \
-  -o "$OUT/OpenAmigaPrint" \
-  "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
-  "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/main.c" -lamiga
+if [ -n "$AMISSL_SDK" ]; then
+  echo "IPPS: enabled with AmiSSL SDK at $AMISSL_SDK"
+  "$CC" -m68000 -O2 -Wall -Wextra -Wno-pointer-sign -noixemul \
+    -DOAP_WITH_AMISSL -I"$ROOT/include" -I"$AMISSL_SDK/include" \
+    -o "$OUT/OpenAmigaPrint" \
+    "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
+    "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/main.c" \
+    -L"$AMISSL_SDK/lib/AmigaOS3" -lamisslstubs -lamiga
+else
+  echo "IPPS: disabled (set AMISSL_SDK to enable it)"
+  "$CC" -m68000 -O2 -Wall -Wextra -Wno-pointer-sign -noixemul \
+    -I"$ROOT/include" -o "$OUT/OpenAmigaPrint" \
+    "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
+    "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/main.c" -lamiga
+fi
 file "$OUT/OpenAmigaPrint"
 wc -c "$OUT/OpenAmigaPrint"
 
