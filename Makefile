@@ -12,3 +12,10 @@ test: build/test_core
 	./build/test_core
 clean:
 	rm -f build/test_core build/oap-firstlight.pdf
+
+.PHONY: test-discovery
+build/test_discovery: tests/test_discovery.c src/discovery/protocol.c src/discovery/http.c include/oap_discovery.h
+	mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) -Wno-misleading-indentation -o $@ tests/test_discovery.c src/discovery/protocol.c src/discovery/http.c
+test-discovery: build/test_discovery
+	./build/test_discovery
