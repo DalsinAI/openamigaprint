@@ -5,9 +5,12 @@
 #include "oap_queue.h"
 #include "oap.h"
 #include "oap_selection.h"
+#include "oap_printers.h"
+#include "oap_stack.h"
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <dos/dos.h>
+#include <dos/dostags.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/gadgetclass.h>
 #include <intuition/icclass.h>
@@ -25,6 +28,9 @@
 #include <gadgets/space.h>
 #include <gadgets/listbrowser.h>
 #include <gadgets/scroller.h>
+#include <gadgets/chooser.h>
+#include <images/bevel.h>
+#include <libraries/gadtools.h>
 #include <workbench/startup.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -40,6 +46,10 @@
 #include <proto/space.h>
 #include <proto/listbrowser.h>
 #include <proto/scroller.h>
+#include <proto/chooser.h>
+#include <proto/label.h>
+#include <images/label.h>
+#include <workbench/workbench.h>
 #include <proto/arexx.h>
 #include <reaction/reaction_macros.h>
 #include <clib/alib_protos.h>
@@ -53,15 +63,17 @@ unsigned long __stack = 65536;
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *UtilityBase,*DataTypesBase,*AslBase,*WindowBase,*LayoutBase;
-struct Library *ButtonBase,*StringBase,*SpaceBase,*ListBrowserBase,*ScrollerBase,*ARexxBase;
+struct Library *ButtonBase,*StringBase,*SpaceBase,*ListBrowserBase,*ScrollerBase,*ARexxBase,*ChooserBase,*LabelBase;
 #define MAX_JOBS 128
 #define REG(r,t) register t __asm(#r)
 enum { B_OPEN=1,B_PAGE,B_FIT,B_ONE,B_MINUS,B_PLUS,B_PLAY,B_PAUSE,B_STOP,B_PREV,B_NEXT,
- B_PAPER,B_ORIENT,B_SCALE,B_EXPORT,B_PRINT,B_QOPEN,B_REFRESH,B_SEND,B_CANCEL,B_INFO,B_LIST,B_VSCROLL,B_HSCROLL,B_URI,B_STATUS,B_FILE,B_QUIT,B_BROWSE };
+ B_PAPER,B_ORIENT,B_SCALE,B_EXPORT,B_PRINT,B_QOPEN,B_REFRESH,B_SEND,B_CANCEL,B_INFO,B_LIST,B_VSCROLL,B_HSCROLL,B_URI,B_STATUS,B_FILE,B_QUIT,B_BROWSE,
+ B_PRINTDLG,B_VIEW,B_PRINTERS };
 typedef struct QueueRow { char name[128],path[OAV_PATH_MAX],state[32]; } QueueRow;
 static struct App {
  Object *winobj,*dto,*space,*status,*file,*qg,*uri,*vscroll,*hscroll,*rx;
- Object *play,*pause,*stop,*paper,*orient,*scalemode,*pagebutton;
+ Object *paper,*orient,*scalemode,*pagebutton,*cancel;
+ struct MsgPort *appport;char title[160];int print_after;  /* print_after: open the Print requester when the queued PDF is ready */
  struct Window *win;struct Screen *screen;struct DrawInfo *drawinfo;
  struct Hook idcmp_hook,render_hook;struct List qlist;QueueRow jobs[MAX_JOBS];
  OAVLayout settings;OAVPlacement placement;
@@ -71,10 +83,10 @@ static struct App {
  char path[OAV_PATH_MAX],lastreq[OAV_PATH_MAX],message[256],resultbuf[2048];
  int running,refresh,page,zoom,job_active,qcount,have_white,ticks,poll_jobs;
 } A;
-static struct ColumnInfo columns[]={{65,(STRPTR)"Job",CIF_DRAGGABLE},{35,(STRPTR)"State",CIF_DRAGGABLE},{-1,NULL,0}};
+static void page_setup_applies(int yes);
 static void copystr(char *d,size_t n,const char *s){if(n){strncpy(d,s,n-1);d[n-1]=0;}}
 static void status(const char *s)
-{copystr(A.message,sizeof(A.message),s);if(A.win&&A.status)SetGadgetAttrs((struct Gadget *)A.status,A.win,NULL,STRINGA_TextVal,(ULONG)A.message,TAG_DONE);}
+{copystr(A.message,sizeof(A.message),s);if(A.win&&A.status)SetGadgetAttrs((struct Gadget *)A.status,A.win,NULL,GA_Text,(ULONG)A.message,TAG_DONE);}
 static int trigger_supported(ULONG id)
 {struct DTMethod *m;int i;if(!A.dto)return 0;m=(struct DTMethod *)GetDTTriggerMethods(A.dto);if(!m)return 0;for(i=0;i<128&&m[i].dtm_Label;i++)if((m[i].dtm_Method&STMF_METHOD_MASK)==id)return 1;return 0;}
 static void scroll_info(void)
@@ -116,7 +128,12 @@ static int load_file(const char *path)
  if(bytes<0||bytes>(long)OAV_FILE_LIMIT){status("Source exceeds the 64 MiB viewer file limit");return 0;}
  status("Loading datatype...");
  dto=NewDTObject((APTR)path,DTA_SourceType,DTST_FILE,ICA_TARGET,ICTARGET_IDCMP,PDTA_DestMode,PMODE_V43,PDTA_Screen,(ULONG)A.screen,PDTA_Remap,TRUE,AGA_Secure,TRUE,DTA_ControlPanel,TRUE,GA_ID,1000,TAG_DONE);
- if(!dto){snprintf(msg,sizeof(msg),"Cannot decode (DOS %ld). %.180s",(long)IoErr(),oav_format_note(path));status(msg);return 0;}
+ if(!dto){
+  LONG err=IoErr();const char *ext=strrchr(path,'.');const char *name=FilePart((STRPTR)path);
+  if(ext&&!strcasecmp(ext,".pdf"))snprintf(msg,sizeof(msg),"%.60s: no PDF datatype is installed. Use Print to print it with OpenAmigaPrint, or install a PDF datatype.",name);
+  else if(err==ERROR_OBJECT_WRONG_TYPE||err==2000)snprintf(msg,sizeof(msg),"%.60s: no datatype on this Amiga can open this kind of file",name);
+  else snprintf(msg,sizeof(msg),"%.60s couldn't be opened (DOS error %ld)",name,(long)err);
+  copystr(A.path,sizeof(A.path),path);status(msg);return 0;}
  memset(&fi,0,sizeof(fi));memset(&frame,0,sizeof(frame));
  frame.MethodID=DTM_FRAMEBOX;frame.dtf_ContentsInfo=&fi;frame.dtf_FrameInfo=&fi;frame.dtf_SizeFrameInfo=sizeof(fi);
  DoDTMethodA(dto,NULL,NULL,(Msg)&frame);
@@ -161,11 +178,11 @@ static int load_file(const char *path)
  close_content();A.dto=dto;A.group=group;A.natural_w=w;A.natural_h=h;
  copystr(A.path,sizeof(A.path),path);
  if(AddDTObject(A.win,NULL,dto,-1)<0){DisposeDTObject(dto);A.dto=NULL;status("Datatype could not attach to the preview window");return 0;}
- SetGadgetAttrs((struct Gadget *)A.file,A.win,NULL,STRINGA_TextVal,(ULONG)A.path,TAG_DONE);
- SetGadgetAttrs((struct Gadget *)A.play,A.win,NULL,GA_Disabled,!trigger_supported(STM_PLAY),TAG_DONE);
- SetGadgetAttrs((struct Gadget *)A.pause,A.win,NULL,GA_Disabled,!(trigger_supported(STM_PAUSE)||group==GID_ANIMATION),TAG_DONE);
- SetGadgetAttrs((struct Gadget *)A.stop,A.win,NULL,GA_Disabled,!(trigger_supported(STM_STOP)||group==GID_ANIMATION),TAG_DONE);
- snprintf(msg,sizeof(msg),"%s | %lu x %lu | %s",dt&&dt->dtn_Header?(char *)dt->dtn_Header->dth_Name:"Datatype",(unsigned long)w,(unsigned long)h,group==GID_PICTURE?"picture; original pixels retained for export":group==GID_ANIMATION?"animation":"native datatype view");
+ snprintf(A.title,sizeof(A.title),"OpenAmigaView: %.120s",FilePart((STRPTR)A.path));SetAttrs(A.winobj,WA_Title,(ULONG)A.title,TAG_DONE);
+ /* animations and sounds bring their own player bar (DTA_ControlPanel);
+  * page setup is for pictures, the only thing laid out on paper here */
+ page_setup_applies(group==GID_PICTURE);
+ snprintf(msg,sizeof(msg),"%.60s \xb7 %s, %lu \xd7 %lu%s",FilePart((STRPTR)path),dt&&dt->dtn_Header?(char *)dt->dtn_Header->dth_Name:"Datatype",(unsigned long)w,(unsigned long)h,group==GID_ANIMATION?" \xb7 animation":"");
  status(msg);RefreshGList((struct Gadget *)A.space,A.win,NULL,1);A.refresh=1;return 1;
 }
 static void reload(void){char path[OAV_PATH_MAX];if(!A.path[0])return;copystr(path,sizeof(path),A.path);load_file(path);}
@@ -178,7 +195,7 @@ static int qcmp(const void *a,const void *b){return strcmp(((const QueueRow *)a)
 static void scan_queue(void)
 {
  DIR *d;struct dirent *e;int i;LONG selection=-1;
- if(A.win){GetAttr(LISTBROWSER_Selected,A.qg,(ULONG *)&selection);SetGadgetAttrs((struct Gadget *)A.qg,A.win,NULL,LISTBROWSER_Labels,(ULONG)-1,TAG_DONE);}
+ if(A.win&&A.qg){GetAttr(LISTBROWSER_Selected,A.qg,(ULONG *)&selection);SetGadgetAttrs((struct Gadget *)A.qg,A.win,NULL,LISTBROWSER_Labels,(ULONG)-1,TAG_DONE);}
  FreeListBrowserList(&A.qlist);NewList(&A.qlist);A.qcount=0;
  d=opendir(OAP_QUEUE_DIR);if(d){while((e=readdir(d))&&A.qcount<MAX_JOBS){size_t n=strlen(e->d_name);FILE *f;char mp[OAV_PATH_MAX],line[256];QueueRow *r;
   if(n<5||strcmp(e->d_name+n-4,".job"))continue;r=&A.jobs[A.qcount];
@@ -188,15 +205,15 @@ static void scan_queue(void)
   fclose(f);A.qcount++;
  }closedir(d);}qsort(A.jobs,(size_t)A.qcount,sizeof(A.jobs[0]),qcmp);
  for(i=0;i<A.qcount;i++){struct Node *n=AllocListBrowserNode(2,LBNA_Column,0,LBNCA_Text,(ULONG)A.jobs[i].name,LBNA_Column,1,LBNCA_Text,(ULONG)A.jobs[i].state,TAG_DONE);if(n)AddTail(&A.qlist,n);}
- if(A.win)SetGadgetAttrs((struct Gadget *)A.qg,A.win,NULL,LISTBROWSER_Labels,(ULONG)&A.qlist,LISTBROWSER_Selected,selection<A.qcount?selection:-1,TAG_DONE);
+ if(A.win&&A.qg)SetGadgetAttrs((struct Gadget *)A.qg,A.win,NULL,LISTBROWSER_Labels,(ULONG)&A.qlist,LISTBROWSER_Selected,selection<A.qcount?selection:-1,TAG_DONE);
 }
-static int selected(void){LONG i=-1;GetAttr(LISTBROWSER_Selected,A.qg,(ULONG *)&i);return i>=0&&i<A.qcount?(int)i:-1;}
+static int selected(void){LONG i=-1;if(!A.qg)return -1;GetAttr(LISTBROWSER_Selected,A.qg,(ULONG *)&i);return i>=0&&i<A.qcount?(int)i:-1;}
 static int start_job(const char *action,const char *output,const char *source)
 {
- OAVRequest r;ULONG uri=0;char err[256];if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))&&oav_result_terminal(st))A.job_active=0;}if(A.job_active){status("A worker is active; wait or request Cancel");return 0;}
+ OAVRequest r;ULONG uri=0;char err[256];if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))&&oav_result_terminal(st))A.job_active=0;}if(A.job_active){status("Still preparing the last page; wait, or choose Stop preparing");return 0;}
  memset(&r,0,sizeof(r));copystr(r.source,sizeof(r.source),source?source:A.path);copystr(r.action,sizeof(r.action),action);if(output)copystr(r.output,sizeof(r.output),output);
- GetAttr(STRINGA_TextVal,A.uri,&uri);if(uri)copystr(r.uri,sizeof(r.uri),(char *)uri);r.layout=A.settings;
- if(oav_submit(&r,A.lastreq,sizeof(A.lastreq),err,sizeof(err))){A.job_active=1;status(err);return 1;}status(err);return 0;
+ if(A.uri)GetAttr(STRINGA_TextVal,A.uri,&uri);if(uri)copystr(r.uri,sizeof(r.uri),(char *)uri);else copystr(r.uri,sizeof(r.uri),A.printer_saved);r.layout=A.settings;
+ if(oav_submit(&r,A.lastreq,sizeof(A.lastreq),err,sizeof(err))){A.job_active=1;if(A.win)SetGadgetAttrs((struct Gadget *)A.cancel,A.win,NULL,GA_Disabled,FALSE,TAG_DONE);status(err);return 1;}status(err);return 0;
 }
 static int do_trigger(ULONG id)
 {
@@ -210,26 +227,50 @@ static int do_trigger(ULONG id)
  }
  memset(&t,0,sizeof(t));t.MethodID=DTM_TRIGGER;t.dtt_Function=id;DoDTMethodA(A.dto,A.win,NULL,(Msg)&t);return 1;
 }
+/* Print hands over to the Print requester (one way to print): a PDF as it
+ * is, anything else as a PDF the worker makes first (see print_after). */
+static int run_program(const char *program,const char *arg)
+{
+ char path[256],cmd[OAV_PATH_MAX+300];BPTR in=Open((STRPTR)"NIL:",MODE_OLDFILE),out=Open((STRPTR)"NIL:",MODE_NEWFILE);
+ oap_program_path(program,path,sizeof(path));
+ if(arg)snprintf(cmd,sizeof(cmd),"\"%s\" \"%s\"",path,arg);else snprintf(cmd,sizeof(cmd),"\"%s\"",path);
+ if(!in||!out||SystemTags((STRPTR)cmd,SYS_Asynch,TRUE,SYS_Input,in,SYS_Output,out,NP_StackSize,65536,TAG_DONE)==-1){if(in)Close(in);if(out)Close(out);return 0;}
+ return 1;
+}
+static int print_dialog(void)
+{
+ const char *ext;
+ if(!A.path[0]){status("Open something to print first");return 0;}
+ ext=strrchr(A.path,'.');
+ if(ext&&!strcasecmp(ext,".pdf")){status(run_program("OpenAmigaPrint",A.path)?"The Print window is open":"Couldn't open OpenAmigaPrint");return 1;}
+ if(A.group!=GID_PICTURE){status("Only pictures and PDFs can be printed from here for now");return 0;}
+ if(!start_job("queue",NULL,NULL))return 0;
+ A.print_after=1;status("Preparing the page for printing...");return 1;
+}
+static int open_printers(void)
+{status(run_program("OAPPrinters",NULL)?"Printers and Queue is open":"Couldn't open OAPPrinters");return 1;}
 static int action(int id,const char *arg)
 {
  char path[OAV_PATH_MAX];int i;ULONG v;
  switch(id){
  case B_OPEN:if(arg)return load_file(arg);if(choose_file(path,0))return load_file(path);return 0;
- case B_PAGE:A.page=!A.page;SetGadgetAttrs((struct Gadget *)A.pagebutton,A.win,NULL,GA_Text,(ULONG)(A.page?"Page layout":"Source view"),TAG_DONE);reload();return 1;
+ case B_PAGE:A.page=!A.page;SetGadgetAttrs((struct Gadget *)A.pagebutton,A.win,NULL,CHOOSER_Selected,A.page?0:1,TAG_DONE);reload();return 1;
+ case B_VIEW:GetAttr(CHOOSER_Selected,A.pagebutton,&v);A.page=v==0;reload();return 1;
  case B_FIT:A.page=0;A.zoom=0;reload();return 1;
  case B_ONE:A.page=0;A.zoom=100;reload();return 1;
  case B_MINUS:A.page=0;A.zoom=A.zoom?A.zoom-25:75;if(A.zoom<25)A.zoom=25;reload();return 1;
  case B_PLUS:A.page=0;A.zoom=A.zoom?A.zoom+25:125;if(A.zoom>400)A.zoom=400;reload();return 1;
- case B_PAPER:A.settings.paper=!A.settings.paper;SetGadgetAttrs((struct Gadget *)A.paper,A.win,NULL,GA_Text,(ULONG)(A.settings.paper?"Letter":"A4"),TAG_DONE);reload();return 1;
- case B_ORIENT:A.settings.landscape=!A.settings.landscape;SetGadgetAttrs((struct Gadget *)A.orient,A.win,NULL,GA_Text,(ULONG)(A.settings.landscape?"Landscape":"Portrait"),TAG_DONE);reload();return 1;
- case B_SCALE:A.settings.scale=!A.settings.scale;SetGadgetAttrs((struct Gadget *)A.scalemode,A.win,NULL,GA_Text,(ULONG)(A.settings.scale?"Fill / crop":"Fit to page"),TAG_DONE);reload();return 1;
+ case B_PAPER:if(arg)A.settings.paper=!A.settings.paper;else{GetAttr(CHOOSER_Selected,A.paper,&v);A.settings.paper=v?OAV_LETTER:OAV_A4;}SetGadgetAttrs((struct Gadget *)A.paper,A.win,NULL,CHOOSER_Selected,A.settings.paper?1:0,TAG_DONE);reload();return 1;
+ case B_ORIENT:if(arg)A.settings.landscape=!A.settings.landscape;else{GetAttr(CHOOSER_Selected,A.orient,&v);A.settings.landscape=v!=0;}SetGadgetAttrs((struct Gadget *)A.orient,A.win,NULL,CHOOSER_Selected,A.settings.landscape?1:0,TAG_DONE);reload();return 1;
+ case B_SCALE:if(arg)A.settings.scale=!A.settings.scale;else{GetAttr(CHOOSER_Selected,A.scalemode,&v);A.settings.scale=v?OAV_FILL:OAV_FIT;}SetGadgetAttrs((struct Gadget *)A.scalemode,A.win,NULL,CHOOSER_Selected,A.settings.scale?1:0,TAG_DONE);reload();return 1;
  case B_EXPORT:if(arg)return start_job("export",arg,NULL);if(choose_file(path,1))return start_job("export",path,NULL);return 0;
  case B_PRINT:return start_job("queue",NULL,NULL);
+ case B_PRINTDLG:return print_dialog();
  case B_QOPEN:i=selected();if(i>=0)return load_file(A.jobs[i].path);status("Select a queued job first");return 0;
  case B_REFRESH:scan_queue();return 1;
- case B_BROWSE:status(oap_launch_printer_browser()?"Choose a verified PDF printer in Browse":"Cannot launch C:OAPPrinters");return 1;
+ case B_BROWSE:case B_PRINTERS:return open_printers();
  case B_SEND:i=selected();if(i>=0)return start_job("send",NULL,A.jobs[i].path);status("Select a queued PDF and enter its IPP destination");return 0;
- case B_CANCEL:if(A.job_active&&oav_cancel(A.lastreq)){status("Cancellation requested; worker stops at next safe decode boundary");return 1;}status("No cancellable render is active");return 0;
+ case B_CANCEL:if(A.job_active&&oav_cancel(A.lastreq)){A.print_after=0;status("Stopping: the worker stops at its next safe point");return 1;}status("Nothing is being prepared");return 0;
  case B_PLAY:return do_trigger(STM_PLAY);case B_PAUSE:return do_trigger(STM_PAUSE);case B_STOP:return do_trigger(STM_STOP);
  case B_PREV:return do_trigger(STM_BROWSE_PREV);case B_NEXT:return do_trigger(STM_BROWSE_NEXT);
  case B_VSCROLL:if(A.dto){GetAttr(SCROLLER_Top,A.vscroll,&v);SetDTAttrs(A.dto,A.win,NULL,DTA_TopVert,v,TAG_DONE);}return 1;
@@ -247,12 +288,12 @@ static int set_option(const char *key,const char *val)
  else if(!strcasecmp(key,"ORIENTATION")){if(!strcasecmp(val,"PORTRAIT"))proposed.landscape=0;else if(!strcasecmp(val,"LANDSCAPE"))proposed.landscape=1;else return 0;}
  else if(!strcasecmp(key,"SCALE")){if(!strcasecmp(val,"FIT"))proposed.scale=OAV_FIT;else if(!strcasecmp(val,"FILL"))proposed.scale=OAV_FILL;else return 0;}
  else if(!strcasecmp(key,"MARGIN")){if(!oav_parse_points(val,&margin))return 0;proposed.margin_cpt=margin;}
- else if(!strcasecmp(key,"PRINTER")){if(!oav_safe_field(val)||strlen(val)>=384)return 0;SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)val,TAG_DONE);return 1;}
+ else if(!strcasecmp(key,"PRINTER")){if(!oav_safe_field(val)||strlen(val)>=384)return 0;copystr(A.printer_saved,sizeof(A.printer_saved),val);return 1;}
  else return 0;
  A.settings=proposed;
- SetGadgetAttrs((struct Gadget *)A.paper,A.win,NULL,GA_Text,(ULONG)(A.settings.paper?"Letter":"A4"),TAG_DONE);
- SetGadgetAttrs((struct Gadget *)A.orient,A.win,NULL,GA_Text,(ULONG)(A.settings.landscape?"Landscape":"Portrait"),TAG_DONE);
- SetGadgetAttrs((struct Gadget *)A.scalemode,A.win,NULL,GA_Text,(ULONG)(A.settings.scale?"Fill / crop":"Fit to page"),TAG_DONE);
+ SetGadgetAttrs((struct Gadget *)A.paper,A.win,NULL,CHOOSER_Selected,A.settings.paper?1:0,TAG_DONE);
+ SetGadgetAttrs((struct Gadget *)A.orient,A.win,NULL,CHOOSER_Selected,A.settings.landscape?1:0,TAG_DONE);
+ SetGadgetAttrs((struct Gadget *)A.scalemode,A.win,NULL,CHOOSER_Selected,A.settings.scale?1:0,TAG_DONE);
  reload();return 1;
 }
 static void rx_command(REG(a0,struct ARexxCmd *c),REG(a1,struct RexxMsg *rm))
@@ -263,7 +304,7 @@ static void rx_command(REG(a0,struct ARexxCmd *c),REG(a1,struct RexxMsg *rm))
  else if(c->ac_ID==202){char st[32],msg[256];if(!A.lastreq[0])copystr(A.resultbuf,sizeof(A.resultbuf),"none");else if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg)))snprintf(A.resultbuf,sizeof(A.resultbuf),"%s %s %s",st,A.lastreq,msg);else snprintf(A.resultbuf,sizeof(A.resultbuf),"running %s",A.lastreq);}
  else if(c->ac_ID==203){int i;size_t n=0;A.resultbuf[0]=0;scan_queue();for(i=0;i<A.qcount&&n<sizeof(A.resultbuf)-160;i++){int len=snprintf(A.resultbuf+n,sizeof(A.resultbuf)-n,"%s %s\n",A.jobs[i].name,A.jobs[i].state);if(len>0)n+=(size_t)len;}}
  else if(c->ac_ID==204){ok=set_option(arg,(char *)c->ac_ArgList[1]);copystr(A.resultbuf,sizeof(A.resultbuf),ok?"Settings applied":"Invalid SET key or value");}
- else{ok=action(c->ac_ID,arg);copystr(A.resultbuf,sizeof(A.resultbuf),(c->ac_ID==B_PRINT||c->ac_ID==B_EXPORT)&&ok?A.lastreq:A.message);}
+ else{ok=action(c->ac_ID,(c->ac_ID==B_PAPER||c->ac_ID==B_ORIENT||c->ac_ID==B_SCALE)?"toggle":arg);copystr(A.resultbuf,sizeof(A.resultbuf),(c->ac_ID==B_PRINT||c->ac_ID==B_EXPORT)&&ok?A.lastreq:A.message);}
  if(!ok){c->ac_RC=10;c->ac_RC2=1;}c->ac_Result=(STRPTR)A.resultbuf;
 }
 #define RX(n,id,t) {(STRPTR)n,id,(VOID (*)())rx_command,(STRPTR)t,0,NULL,0,0,NULL}
@@ -281,100 +322,151 @@ static int libraries(void)
  ButtonBase=OpenLibrary((STRPTR)"gadgets/button.gadget",44);StringBase=OpenLibrary((STRPTR)"gadgets/string.gadget",44);
  SpaceBase=OpenLibrary((STRPTR)"gadgets/space.gadget",44);ListBrowserBase=OpenLibrary((STRPTR)"gadgets/listbrowser.gadget",44);
  ScrollerBase=OpenLibrary((STRPTR)"gadgets/scroller.gadget",44);ARexxBase=OpenLibrary((STRPTR)"arexx.class",44);
- return IntuitionBase&&GfxBase&&UtilityBase&&DataTypesBase&&AslBase&&WindowBase&&LayoutBase&&ButtonBase&&StringBase&&SpaceBase&&ListBrowserBase&&ScrollerBase&&ARexxBase;
+ ChooserBase=OpenLibrary((STRPTR)"gadgets/chooser.gadget",44);LabelBase=OpenLibrary((STRPTR)"images/label.image",44);
+ return IntuitionBase&&GfxBase&&UtilityBase&&DataTypesBase&&AslBase&&WindowBase&&LayoutBase&&ButtonBase&&StringBase&&SpaceBase&&ListBrowserBase&&ScrollerBase&&ARexxBase&&ChooserBase&&LabelBase;
 }
 static Object *make_button(const char *label,ULONG id)
 {return NewObject(BUTTON_GetClass(),NULL,GA_Text,(ULONG)label,GA_ID,id,GA_RelVerify,TRUE,TAG_DONE);}
+static Object *make_label(const char *text){return NewObject(LABEL_GetClass(),NULL,LABEL_Text,(ULONG)text,TAG_DONE);}
+static Object *make_chooser(ULONG id,STRPTR *labels,int selected)
+{return NewObject(CHOOSER_GetClass(),NULL,GA_ID,id,GA_RelVerify,TRUE,CHOOSER_PopUp,TRUE,CHOOSER_LabelArray,(ULONG)labels,CHOOSER_Selected,selected,TAG_DONE);}
+static STRPTR view_labels[]={(STRPTR)"As the page",(STRPTR)"As the file",NULL};
+static STRPTR paper_labels[]={(STRPTR)"A4",(STRPTR)"Letter",NULL};
+static STRPTR orient_labels[]={(STRPTR)"Portrait",(STRPTR)"Landscape",NULL};
+static STRPTR scale_labels[]={(STRPTR)"Fit to page",(STRPTR)"Fill and crop",NULL};
+static struct NewMenu menus[]={
+ {NM_TITLE,(STRPTR)"Project",NULL,0,0,NULL},
+ {NM_ITEM,(STRPTR)"Open...",(STRPTR)"O",0,0,(APTR)B_OPEN},
+ {NM_ITEM,(STRPTR)"Save as PDF...",(STRPTR)"S",0,0,(APTR)B_EXPORT},
+ {NM_ITEM,(STRPTR)"About this file",(STRPTR)"I",0,0,(APTR)B_INFO},
+ {NM_ITEM,NM_BARLABEL,NULL,0,0,NULL},
+ {NM_ITEM,(STRPTR)"Quit",(STRPTR)"Q",0,0,(APTR)B_QUIT},
+ {NM_TITLE,(STRPTR)"View",NULL,0,0,NULL},
+ {NM_ITEM,(STRPTR)"Fit in window",(STRPTR)"F",0,0,(APTR)B_FIT},
+ {NM_ITEM,(STRPTR)"Actual size",(STRPTR)"1",0,0,(APTR)B_ONE},
+ {NM_ITEM,(STRPTR)"Zoom in",(STRPTR)"+",0,0,(APTR)B_PLUS},
+ {NM_ITEM,(STRPTR)"Zoom out",(STRPTR)"-",0,0,(APTR)B_MINUS},
+ {NM_ITEM,(STRPTR)"As the page / as the file",(STRPTR)"L",0,0,(APTR)B_PAGE},
+ {NM_TITLE,(STRPTR)"Print",NULL,0,0,NULL},
+ {NM_ITEM,(STRPTR)"Print...",(STRPTR)"P",0,0,(APTR)B_PRINTDLG},
+ {NM_ITEM,(STRPTR)"Printers and queue...",(STRPTR)"R",0,0,(APTR)B_PRINTERS},
+ {NM_ITEM,(STRPTR)"Stop preparing",(STRPTR)".",0,0,(APTR)B_CANCEL},
+ {NM_END,NULL,NULL,0,0,NULL}};
+/* Open, view, then print: the picture fills the window, page setup sits
+ * beside it as labelled choices, and printing is the Print requester's job. */
+static void page_setup_applies(int yes)
+{
+ Object *g[4];int i;g[0]=A.paper;g[1]=A.orient;g[2]=A.scalemode;g[3]=A.pagebutton;
+ for(i=0;i<4;i++)SetGadgetAttrs((struct Gadget *)g[i],A.win,NULL,GA_Disabled,!yes,TAG_DONE);
+}
 static int window_create(void)
 {
- ULONG rxerr=0;
+ ULONG rxerr=0;Object *zoom,*setup;
  A.screen=LockPubScreen(NULL);if(!A.screen)return 0;A.drawinfo=GetScreenDrawInfo(A.screen);
  A.whitepen=ObtainBestPen(A.screen->ViewPort.ColorMap,0xffffffffUL,0xffffffffUL,0xffffffffUL,TAG_DONE);A.have_white=A.whitepen!=(ULONG)-1;
  if(!A.have_white)A.whitepen=A.drawinfo?A.drawinfo->dri_Pens[SHINEPEN]:2;
  A.idcmp_hook.h_Entry=(ULONG (*)())idcmp_hook;A.render_hook.h_Entry=(ULONG (*)())render_hook;
  A.rx=NewObject(AREXX_GetClass(),NULL,AREXX_HostName,(ULONG)"OPENAMIGAVIEW",AREXX_NoSlot,TRUE,AREXX_Commands,(ULONG)commands,AREXX_ErrorCode,(ULONG)&rxerr,TAG_DONE);
  if(!A.rx){fprintf(stderr,"OpenAmigaView: ARexx host error %lu (another viewer may be open)\n",(unsigned long)rxerr);return 0;}
+ A.appport=CreateMsgPort();
+ zoom=NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,LAYOUT_EvenSize,TRUE,
+  LAYOUT_AddChild,(ULONG)make_button("Fit",B_FIT),LAYOUT_AddChild,(ULONG)make_button("1:1",B_ONE),
+  LAYOUT_AddChild,(ULONG)make_button("-",B_MINUS),LAYOUT_AddChild,(ULONG)make_button("+",B_PLUS),TAG_DONE);
+ setup=NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,LAYOUT_BevelStyle,BVS_GROUP,LAYOUT_Label,(ULONG)"Page setup",
+  LAYOUT_AddChild,(ULONG)(A.paper=make_chooser(B_PAPER,paper_labels,A.settings.paper?1:0)),CHILD_Label,(ULONG)make_label("Paper"),
+  LAYOUT_AddChild,(ULONG)(A.orient=make_chooser(B_ORIENT,orient_labels,A.settings.landscape?1:0)),CHILD_Label,(ULONG)make_label("Turn"),
+  LAYOUT_AddChild,(ULONG)(A.scalemode=make_chooser(B_SCALE,scale_labels,A.settings.scale?1:0)),CHILD_Label,(ULONG)make_label("Size"),
+  TAG_DONE);
+ A.status=NewObject(BUTTON_GetClass(),NULL,GA_ID,B_STATUS,GA_ReadOnly,TRUE,BUTTON_BevelStyle,BVS_THIN,BUTTON_Justification,BCJ_LEFT,
+  GA_Text,(ULONG)A.message,TAG_DONE);
  A.winobj=NewObject(WINDOW_GetClass(),NULL,
-  WA_Title,(ULONG)"OpenAmigaView - Viewer & Print",WA_ScreenTitle,(ULONG)"OpenAmigaPrint | ReAction datatype workspace",
+  WA_Title,(ULONG)"OpenAmigaView",WA_ScreenTitle,(ULONG)"OpenAmigaView: open, look, print",
   WA_PubScreen,(ULONG)A.screen,WA_Activate,TRUE,WA_DragBar,TRUE,WA_CloseGadget,TRUE,WA_DepthGadget,TRUE,WA_SizeGadget,TRUE,
-  WA_Left,10,WA_Top,26,WA_InnerWidth,760,WA_InnerHeight,500,WA_MinWidth,600,WA_MinHeight,360,
-  WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_NEWSIZE|IDCMP_REFRESHWINDOW|IDCMP_IDCMPUPDATE|IDCMP_INTUITICKS|IDCMP_RAWKEY,
+  WA_InnerWidth,720,WA_InnerHeight,440,WINDOW_Position,WPOS_CENTERSCREEN,WINDOW_NewMenu,(ULONG)menus,
+  A.appport?WINDOW_AppPort:TAG_IGNORE,(ULONG)A.appport,WINDOW_AppWindow,A.appport!=NULL,
+  WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_NEWSIZE|IDCMP_REFRESHWINDOW|IDCMP_IDCMPUPDATE|IDCMP_INTUITICKS|IDCMP_RAWKEY|IDCMP_MENUPICK,
   WINDOW_IDCMPHook,(ULONG)&A.idcmp_hook,WINDOW_IDCMPHookBits,IDCMP_IDCMPUPDATE|IDCMP_REFRESHWINDOW|IDCMP_INTUITICKS,
   WINDOW_Layout,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,LAYOUT_SpaceOuter,TRUE,LAYOUT_DeferLayout,TRUE,
    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
-    LAYOUT_AddChild,(ULONG)(make_button("Open...",B_OPEN)),
-    LAYOUT_AddChild,(ULONG)(A.pagebutton=make_button("Page layout",B_PAGE)),
-    LAYOUT_AddChild,(ULONG)(make_button("Fit view",B_FIT)),LAYOUT_AddChild,(ULONG)(make_button("100%",B_ONE)),
-    LAYOUT_AddChild,(ULONG)(make_button("-",B_MINUS)),CHILD_WeightedWidth,0,LAYOUT_AddChild,(ULONG)(make_button("+",B_PLUS)),CHILD_WeightedWidth,0,
-    LAYOUT_AddChild,(ULONG)(make_button("Format info",B_INFO)),
+    LAYOUT_AddChild,(ULONG)make_button("Open...",B_OPEN),CHILD_WeightedWidth,0,
+    LAYOUT_AddChild,(ULONG)make_button("Print...",B_PRINTDLG),CHILD_WeightedWidth,0,
+    LAYOUT_AddChild,(ULONG)make_button("Save as PDF...",B_EXPORT),CHILD_WeightedWidth,0,
+    LAYOUT_AddChild,(ULONG)NewObject(SPACE_GetClass(),NULL,TAG_DONE),
+    LAYOUT_AddChild,(ULONG)(A.pagebutton=make_chooser(B_VIEW,view_labels,A.page?0:1)),CHILD_Label,(ULONG)make_label("Show"),CHILD_WeightedWidth,0,
+    LAYOUT_AddChild,(ULONG)zoom,CHILD_WeightedWidth,0,
    TAG_DONE)),CHILD_WeightedHeight,0,
-   LAYOUT_AddChild,(ULONG)(A.file=NewObject(STRING_GetClass(),NULL,GA_ReadOnly,TRUE,STRINGA_MaxChars,OAV_PATH_MAX,STRINGA_MinVisible,32,STRINGA_TextVal,(ULONG)"Open a file to begin",TAG_DONE)),CHILD_WeightedHeight,0,
    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
     LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,
      LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
-      LAYOUT_AddChild,(ULONG)(A.space=NewObject(SPACE_GetClass(),NULL,SPACE_MinWidth,280,SPACE_MinHeight,160,SPACE_RenderHook,(ULONG)&A.render_hook,TAG_DONE)),
+      LAYOUT_AddChild,(ULONG)(A.space=NewObject(SPACE_GetClass(),NULL,SPACE_MinWidth,280,SPACE_MinHeight,180,SPACE_RenderHook,(ULONG)&A.render_hook,TAG_DONE)),
       LAYOUT_AddChild,(ULONG)(A.vscroll=NewObject(SCROLLER_GetClass(),NULL,GA_ID,B_VSCROLL,GA_RelVerify,TRUE,SCROLLER_Orientation,SORIENT_VERT,SCROLLER_Total,1,SCROLLER_Visible,1,TAG_DONE)),CHILD_WeightedWidth,0,
      TAG_DONE)),
      LAYOUT_AddChild,(ULONG)(A.hscroll=NewObject(SCROLLER_GetClass(),NULL,GA_ID,B_HSCROLL,GA_RelVerify,TRUE,SCROLLER_Orientation,SORIENT_HORIZ,SCROLLER_Total,1,SCROLLER_Visible,1,TAG_DONE)),CHILD_WeightedHeight,0,
-     LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
-      LAYOUT_AddChild,(ULONG)(make_button("Previous",B_PREV)),LAYOUT_AddChild,(ULONG)(A.play=make_button("Play",B_PLAY)),LAYOUT_AddChild,(ULONG)(A.pause=make_button("Pause",B_PAUSE)),
-      LAYOUT_AddChild,(ULONG)(A.stop=make_button("Stop",B_STOP)),LAYOUT_AddChild,(ULONG)(make_button("Next",B_NEXT)),
-     TAG_DONE)),CHILD_WeightedHeight,0,
-    TAG_DONE)),CHILD_WeightedWidth,70,
-    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,LAYOUT_Label,(ULONG)"Print queue",LAYOUT_BevelStyle,BVS_GROUP,
-     LAYOUT_AddChild,(ULONG)(A.qg=NewObject(LISTBROWSER_GetClass(),NULL,GA_ID,B_LIST,GA_RelVerify,TRUE,LISTBROWSER_Labels,(ULONG)&A.qlist,LISTBROWSER_ColumnInfo,(ULONG)columns,LISTBROWSER_ColumnTitles,TRUE,LISTBROWSER_AutoFit,TRUE,TAG_DONE)),
-     LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,LAYOUT_AddChild,(ULONG)(make_button("View",B_QOPEN)),LAYOUT_AddChild,(ULONG)(make_button("Refresh",B_REFRESH)),TAG_DONE)),CHILD_WeightedHeight,0,
-     LAYOUT_AddChild,(ULONG)(make_button("Send selected via IPP",B_SEND)),CHILD_WeightedHeight,0,
-    TAG_DONE)),CHILD_WeightedWidth,30,CHILD_MinWidth,210,
+    TAG_DONE)),
+    LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_VERT,
+     LAYOUT_AddChild,(ULONG)setup,CHILD_WeightedHeight,0,
+     LAYOUT_AddChild,(ULONG)NewObject(SPACE_GetClass(),NULL,TAG_DONE),
+     LAYOUT_AddChild,(ULONG)make_button("Printers and queue...",B_PRINTERS),CHILD_WeightedHeight,0,
+     LAYOUT_AddChild,(ULONG)(A.cancel=make_button("Stop preparing",B_CANCEL)),CHILD_WeightedHeight,0,
+    TAG_DONE)),CHILD_WeightedWidth,0,
    TAG_DONE)),
-   LAYOUT_AddChild,(ULONG)(NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,
-    LAYOUT_AddChild,(ULONG)(A.paper=make_button("A4",B_PAPER)),LAYOUT_AddChild,(ULONG)(A.orient=make_button("Portrait",B_ORIENT)),LAYOUT_AddChild,(ULONG)(A.scalemode=make_button("Fit to page",B_SCALE)),
-    LAYOUT_AddChild,(ULONG)(make_button("Save PDF...",B_EXPORT)),LAYOUT_AddChild,(ULONG)(make_button("Add to queue",B_PRINT)),LAYOUT_AddChild,(ULONG)(make_button("Cancel job",B_CANCEL)),
-   TAG_DONE)),CHILD_WeightedHeight,0,
-   LAYOUT_AddChild,(ULONG)NewObject(LAYOUT_GetClass(),NULL,LAYOUT_Orientation,LAYOUT_ORIENT_HORIZ,LAYOUT_AddChild,(ULONG)(A.uri=NewObject(STRING_GetClass(),NULL,GA_ID,B_URI,STRINGA_MaxChars,384,STRINGA_MinVisible,30,STRINGA_TextVal,(ULONG)"",GA_RelVerify,TRUE,TAG_DONE)),LAYOUT_AddChild,(ULONG)make_button("Browse printers...",B_BROWSE),CHILD_WeightedWidth,0,TAG_DONE),CHILD_WeightedHeight,0,
-   LAYOUT_AddChild,(ULONG)(A.status=NewObject(STRING_GetClass(),NULL,GA_ReadOnly,TRUE,STRINGA_MaxChars,256,STRINGA_MinVisible,40,STRINGA_TextVal,(ULONG)"Browse verifies PDF support. Add to queue does not send paper.",TAG_DONE)),CHILD_WeightedHeight,0,
+   LAYOUT_AddChild,(ULONG)A.status,CHILD_WeightedHeight,0,
   TAG_DONE)),
  TAG_DONE);
- if(!A.winobj)return 0;A.win=RA_OpenWindow(A.winobj);return A.win!=NULL;
+ if(!A.winobj)return 0;
+ SetAttrs(A.cancel,GA_Disabled,TRUE,TAG_DONE);
+ A.win=RA_OpenWindow(A.winobj);return A.win!=NULL;
 }
-int main(int argc,char **argv)
+static int viewer_main(int argc,char **argv)
 {
- ULONG winsig=0,rexxsig=0,sig,res;UWORD code;char initial[OAV_PATH_MAX]={0};int rc=20;
+ ULONG winsig=0,rexxsig=0,appsig=0,sig,res;UWORD code;char initial[OAV_PATH_MAX]={0};int rc=20;
  memset(&A,0,sizeof(A));NewList(&A.qlist);oav_layout_defaults(&A.settings);A.page=1;
+ copystr(A.message,sizeof(A.message),"Open a picture or a PDF, or drop one on this window");
  if(!libraries()){fputs("OpenAmigaView: missing ReAction or datatype classes (requires AmigaOS 3.2 class set)\n",stderr);goto out;}
  if(!window_create())goto out;oap_selection_open(&A.selection);A.running=1;scan_queue();
  if(argc>1)copystr(initial,sizeof(initial),argv[1]);
  else if(argc==0){struct WBStartup *w=(struct WBStartup *)argv;if(w->sm_NumArgs>1){NameFromLock(w->sm_ArgList[1].wa_Lock,(STRPTR)initial,sizeof(initial));AddPart((STRPTR)initial,w->sm_ArgList[1].wa_Name,sizeof(initial));}}
  if(initial[0])load_file(initial);
  GetAttr(WINDOW_SigMask,A.winobj,&winsig);GetAttr(AREXX_SigMask,A.rx,&rexxsig);
+ if(A.appport)appsig=1UL<<A.appport->mp_SigBit;
  while(A.running){
-  sig=Wait(winsig|rexxsig|oap_selection_mask(&A.selection)|SIGBREAKF_CTRL_C);
+  sig=Wait(winsig|rexxsig|appsig|oap_selection_mask(&A.selection)|SIGBREAKF_CTRL_C);
+  if(sig&appsig){struct AppMessage *am;char dropped[OAV_PATH_MAX];dropped[0]=0;
+   while((am=(struct AppMessage *)GetMsg(A.appport))){
+    if(am->am_NumArgs>0&&!dropped[0]&&NameFromLock(am->am_ArgList[0].wa_Lock,(STRPTR)dropped,sizeof(dropped)))AddPart((STRPTR)dropped,am->am_ArgList[0].wa_Name,sizeof(dropped));
+    ReplyMsg((struct Message *)am);}
+   if(dropped[0])load_file(dropped);}
   {char chosen[384];if(oap_selection_receive(&A.selection,chosen,sizeof(chosen))){
-    strcpy(A.printer_saved,chosen);
-    SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)A.printer_saved,TAG_DONE);
-    status("Printer selection applied; Send verifies PDF support again");
+    copystr(A.printer_saved,sizeof(A.printer_saved),chosen);
   }}if(sig&SIGBREAKF_CTRL_C)A.running=0;
   if(sig&rexxsig)RA_HandleRexx(A.rx);
   while((res=RA_HandleInput(A.winobj,&code))!=WMHI_LASTMSG){
    switch(res&WMHI_CLASSMASK){case WMHI_CLOSEWINDOW:A.running=0;break;
    case WMHI_GADGETUP:action((int)(res&WMHI_GADGETMASK),NULL);break;
    case WMHI_NEWSIZE:reload();break;
+   case WMHI_MENUPICK:{struct Menu *strip=NULL;UWORD number=(UWORD)(res&WMHI_MENUMASK);GetAttr(WINDOW_MenuStrip,A.winobj,(ULONG *)&strip);
+    while(strip&&number!=MENUNULL){struct MenuItem *item=ItemAddress(strip,number);if(!item)break;action((int)(ULONG)GTMENUITEM_USERDATA(item),NULL);number=item->NextSelect;}
+    break;}
 
    default:break;
    }
   }
-  if(A.poll_jobs){char selected_printer[384];A.poll_jobs=0;if(oap_selected_printer(selected_printer,sizeof(selected_printer))&&strcmp(selected_printer,A.printer_saved)){strcpy(A.printer_saved,selected_printer);SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)selected_printer,TAG_DONE);status("PDF printer selected; Send rechecks its capabilities");}if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){if(oav_result_terminal(st)){A.job_active=0;scan_queue();}status(msg);}}}
+  if(A.poll_jobs){char selected_printer[384];A.poll_jobs=0;if(oap_selected_printer(selected_printer,sizeof(selected_printer)))copystr(A.printer_saved,sizeof(A.printer_saved),selected_printer);if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){if(oav_result_terminal(st)){A.job_active=0;scan_queue();
+    if(A.print_after){const char *pdf=strstr(msg,"Queued: ");A.print_after=0;if(pdf&&run_program("OpenAmigaPrint",pdf+8))copystr(msg,sizeof(msg),"The Print window is open for this page");}}
+    SetGadgetAttrs((struct Gadget *)A.cancel,A.win,NULL,GA_Disabled,!A.job_active,TAG_DONE);status(msg);}}}
   if(A.refresh&&A.dto){A.refresh=0;RefreshDTObjectA(A.dto,A.win,NULL,NULL);scroll_info();}
  }
  rc=0;
 out:
  oap_selection_close(&A.selection);
  close_content();if(A.winobj)DisposeObject(A.winobj);A.win=NULL;
+ if(A.appport){struct Message *m;while((m=GetMsg(A.appport)))ReplyMsg(m);DeleteMsgPort(A.appport);}
  if(A.rx)DisposeObject(A.rx);if(ListBrowserBase)FreeListBrowserList(&A.qlist);
  if(A.have_white&&A.screen)ReleasePen(A.screen->ViewPort.ColorMap,A.whitepen);
  if(A.drawinfo)FreeScreenDrawInfo(A.screen,A.drawinfo);if(A.screen)UnlockPubScreen(NULL,A.screen);
  #define CLOSELIB(b) if(b)CloseLibrary((struct Library *)(b))
- CLOSELIB(ARexxBase);CLOSELIB(ScrollerBase);CLOSELIB(ListBrowserBase);CLOSELIB(SpaceBase);CLOSELIB(StringBase);CLOSELIB(ButtonBase);CLOSELIB(LayoutBase);CLOSELIB(WindowBase);
+ CLOSELIB(LabelBase);CLOSELIB(ChooserBase);CLOSELIB(ARexxBase);CLOSELIB(ScrollerBase);CLOSELIB(ListBrowserBase);CLOSELIB(SpaceBase);CLOSELIB(StringBase);CLOSELIB(ButtonBase);CLOSELIB(LayoutBase);CLOSELIB(WindowBase);
  CLOSELIB(AslBase);CLOSELIB(DataTypesBase);CLOSELIB(UtilityBase);CLOSELIB(GfxBase);CLOSELIB(IntuitionBase);
  return rc;
 }
+int main(int argc,char **argv){return oap_main_with_stack(viewer_main,argc,argv,65536);}

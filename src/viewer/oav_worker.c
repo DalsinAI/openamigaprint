@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
+#include "oap_stack.h"
 #include "oav_core.h"
 #include "oav_jobs.h"
 #include "oap.h"
@@ -70,7 +71,7 @@ static int copyfile(const char *from,const char *to)
  while((n=fread(buf,1,sizeof(buf),a))){total+=(unsigned long)n;if(total>OAV_FILE_LIMIT||fwrite(buf,1,n,b)!=n){ok=0;break;}}
  if(ferror(a))ok=0;fclose(a);if(fclose(b))ok=0;if(!ok)remove(to);return ok;
 }
-int main(int argc,char **argv)
+static int worker_main(int argc,char **argv)
 {
  static OAVRequest r;static Pixels px;Object *dto=NULL;struct BitMapHeader *bmh=NULL;FILE *f=NULL;
  static char snapshot[OAV_PATH_MAX+20],out[OAV_PATH_MAX],part[OAV_PATH_MAX+20],meta[OAV_PATH_MAX+20],msg[256];
@@ -122,7 +123,7 @@ commit:
  if(ok&&!strcmp(r.action,"queue")){
   size_t n;strncpy(meta,out,sizeof(meta)-1);meta[sizeof(meta)-1]=0;n=strlen(meta);strcpy(meta+n-4,".job");
   f=fopen(out,"rb");size=0;if(f){fseek(f,0,SEEK_END);size=ftell(f);fclose(f);f=NULL;}
-  f=fopen(meta,"w");if(f){fprintf(f,"state=queued\nbytes=%ld\npdf=%s\nsource=%s\nrequest=%s\n",size,out,snapshot,argv[1]);if(fclose(f)){ok=0;strcpy(msg,"PDF saved but queue metadata close failed");}f=NULL;}else{ok=0;strcpy(msg,"PDF saved but queue metadata could not be created");}
+  f=fopen(meta,"w");if(f){fprintf(f,"state=queued\nbytes=%ld\npdf=%s\nsource=%s\nrequest=%s\ntitle=%s\n",size,out,snapshot,argv[1],FilePart((STRPTR)r.source));if(fclose(f)){ok=0;strcpy(msg,"PDF saved but queue metadata close failed");}f=NULL;}else{ok=0;strcpy(msg,"PDF saved but queue metadata could not be created");}
  }
  if(ok)snprintf(msg,sizeof(msg),"%s: %.210s",!strcmp(r.action,"queue")?"Queued":"Saved",out);
 done:
@@ -131,3 +132,4 @@ done:
  if(!ok&&part[0])remove(part);
  result(argv[1],ok?"ready":px.cancelled?"cancelled":"error",msg);return ok?0:20;
 }
+int main(int argc,char **argv){return oap_main_with_stack(worker_main,argc,argv,65536);}
