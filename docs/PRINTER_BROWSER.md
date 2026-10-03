@@ -54,6 +54,8 @@ The build scripts now use strong library-base definitions (`-fno-common`) so the
 runtime does not pull in libnix's unintended window.library auto-opener. This
 preserves the explicit ReAction class/library lifecycle.
 
-The patched transport receives live responses; native Instance-23 networking
-startup remains a separate unresolved acceptance gate. Do not label this a
-successful native printer-discovery or physical-print test yet.
+Native discovery now has an observed pass: the ReAction default view showed
+the colour HP as PDF confirmed/ready, and Show all subsequently showed six
+IPP/IPPS endpoints across the two HPs and Epson. Network startup was intermittent
+during testing; see integration/cradle/README.md for the failure and recovery
+sequence. Physical job completion is still a separate, unverified gate.
