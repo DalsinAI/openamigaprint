@@ -11,7 +11,7 @@
 extern struct Library *SocketBase;
 int oap_ipp_submit_pdf(const char *pdf,const OAPJobOptions *o,char *status,size_t cap)
 {
- OAPUri u;OAPCaps capabilities,reply;FILE *f=NULL;
+ OAPUri u;OAPCaps capabilities,reply;OAPJobOptions effective;FILE *f=NULL;
  unsigned char prefix[2048],chunk[8192],*body=NULL;size_t plen=0,bn=0,n;
  char header[1024],note[256];long flen,hn;int socket=-1,ok=0;
  if(!status||!cap)return 0;status[0]=0;
@@ -22,7 +22,11 @@ int oap_ipp_submit_pdf(const char *pdf,const OAPJobOptions *o,char *status,size_
  if(!oap_net_start()){snprintf(status,cap,"bsdsocket.library is not available");goto done;}
  if(!oap_query_pdf(o->printer_uri,&capabilities,note,sizeof(note))||capabilities.pdf!=OAP_PDF_YES){snprintf(status,cap,"PDF not confirmed: %.180s",note);goto done;}
  if(capabilities.accepting==0){snprintf(status,cap,"Printer is not accepting jobs");goto done;}
- if(!oap_ipp_build_prefix(o,prefix,sizeof(prefix),&plen)){snprintf(status,cap,"Cannot encode IPP print job");goto done;}
+ effective=*o;
+ /* A monochrome PDF-capable printer must not receive a colour-only request. */
+ if(!capabilities.color)effective.color=OAP_MONO;
+ if(effective.duplex!=OAP_SIMPLEX&&!capabilities.duplex){snprintf(status,cap,"Printer has not confirmed duplex; choose one-sided");goto done;}
+ if(!oap_ipp_build_prefix(&effective,prefix,sizeof(prefix),&plen)){snprintf(status,cap,"Cannot encode IPP print job");goto done;}
  socket=oap_net_connect(u.host,u.port);if(socket<0){snprintf(status,cap,"Printer connection failed");goto done;}
  hn=snprintf(header,sizeof(header),"POST %s HTTP/1.1\r\nHost: %s:%u\r\nContent-Type: application/ipp\r\nContent-Length: %lu\r\nConnection: close\r\nUser-Agent: OpenAmigaPrint/0.2\r\n\r\n",u.path,u.host,(unsigned)u.port,(unsigned long)(plen+flen));
  if(hn<0||hn>=(long)sizeof(header)||!oap_net_write(socket,header,(size_t)hn)||!oap_net_write(socket,prefix,plen)){snprintf(status,cap,"IPP request write failed");goto done;}
