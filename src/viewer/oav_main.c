@@ -191,7 +191,7 @@ static void scan_queue(void)
 static int selected(void){LONG i=-1;GetAttr(LISTBROWSER_Selected,A.qg,(ULONG *)&i);return i>=0&&i<A.qcount?(int)i:-1;}
 static int start_job(const char *action,const char *output,const char *source)
 {
- OAVRequest r;ULONG uri=0;char err[256];if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg)))A.job_active=0;}if(A.job_active){status("A worker is active; wait or request Cancel");return 0;}
+ OAVRequest r;ULONG uri=0;char err[256];if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))&&oav_result_terminal(st))A.job_active=0;}if(A.job_active){status("A worker is active; wait or request Cancel");return 0;}
  memset(&r,0,sizeof(r));copystr(r.source,sizeof(r.source),source?source:A.path);copystr(r.action,sizeof(r.action),action);if(output)copystr(r.output,sizeof(r.output),output);
  GetAttr(STRINGA_TextVal,A.uri,&uri);if(uri)copystr(r.uri,sizeof(r.uri),(char *)uri);r.layout=A.settings;
  if(oav_submit(&r,A.lastreq,sizeof(A.lastreq),err,sizeof(err))){A.job_active=1;status(err);return 1;}status(err);return 0;
@@ -356,7 +356,7 @@ int main(int argc,char **argv)
    default:break;
    }
   }
-  if(A.poll_jobs){char selected_printer[384];A.poll_jobs=0;if(oap_selected_printer(selected_printer,sizeof(selected_printer))&&strcmp(selected_printer,A.printer_saved)){strcpy(A.printer_saved,selected_printer);SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)selected_printer,TAG_DONE);status("PDF printer selected; Send rechecks its capabilities");}if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){A.job_active=0;status(msg);scan_queue();}}}
+  if(A.poll_jobs){char selected_printer[384];A.poll_jobs=0;if(oap_selected_printer(selected_printer,sizeof(selected_printer))&&strcmp(selected_printer,A.printer_saved)){strcpy(A.printer_saved,selected_printer);SetGadgetAttrs((struct Gadget *)A.uri,A.win,NULL,STRINGA_TextVal,(ULONG)selected_printer,TAG_DONE);status("PDF printer selected; Send rechecks its capabilities");}if(A.job_active){char st[32],msg[256];if(oav_result(A.lastreq,st,sizeof(st),msg,sizeof(msg))){if(oav_result_terminal(st)){A.job_active=0;scan_queue();}status(msg);}}}
   if(A.refresh&&A.dto){A.refresh=0;RefreshDTObjectA(A.dto,A.win,NULL,NULL);scroll_info();}
  }
  rc=0;
