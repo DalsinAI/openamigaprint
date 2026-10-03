@@ -26,6 +26,22 @@ static STRPTR color_labels[]={ (STRPTR)"Colour",(STRPTR)"Monochrome",NULL };
 static STRPTR duplex_labels[]={ (STRPTR)"One-sided",(STRPTR)"Two-sided long",(STRPTR)"Two-sided short",NULL };
 static long pdf_size(const char *p){FILE*f=fopen(p,"rb");long n=-1;if(f){if(!fseek(f,0,SEEK_END))n=ftell(f);fclose(f);}return n;}
 static int copy_file(const char *a,const char *b){FILE*i=fopen(a,"rb"),*o;char q[8192];size_t n;if(!i)return 0;o=fopen(b,"wb");if(!o){fclose(i);return 0;}while((n=fread(q,1,sizeof(q),i))>0)if(fwrite(q,1,n,o)!=n){fclose(i);fclose(o);return 0;}fclose(i);fclose(o);return 1;}
+static int job_meta_path(const char *pdf,char *out,size_t cap)
+{
+    size_t n;if(!pdf||!out||cap<6)return 0;n=strlen(pdf);if(n<4||strcmp(pdf+n-4,".pdf"))return 0;
+    if(n+1>cap)return 0;
+    strcpy(out,pdf);
+    strcpy(out+n-4,".job");
+    return 1;
+}
+static void write_job_state(const char *pdf,const char *state,const char *printer)
+{
+    char meta[512];FILE *f;long bytes=pdf_size(pdf);if(!job_meta_path(pdf,meta,sizeof(meta)))return;
+    f=fopen(meta,"w");if(!f)return;
+    fprintf(f,"state=%s\nbytes=%ld\npdf=%s\n",state?state:"queued",bytes<0?0:bytes,pdf);
+    if(printer&&printer[0])fprintf(f,"printer=%s\n",printer);
+    fclose(f);
+}
 static void parse_pages(const char *s,OAPJobOptions *o){int a=0,b=0;o->page_start=o->page_end=0;if(!s||!s[0]||!strcmp(s,"All")||!strcmp(s,"all"))return;if(sscanf(s,"%d-%d",&a,&b)==2&&a>0&&b>=a){o->page_start=a;o->page_end=b;}else if(sscanf(s,"%d",&a)==1&&a>0){o->page_start=o->page_end=a;}}
 static void draw_preview(struct Window *w,const char *pdf,const char *status)
 {
@@ -68,7 +84,10 @@ int oap_run_print_dialog(const char *pdf,OAPJobOptions *o)
     if(!guri||!gcopy||!gpaper||!gorient||!gcolor||!gduplex||!gpages||!gprint||!gsave||!gcancel){ret=0;goto out;}
     w=OpenWindowTags(NULL,WA_Title,(ULONG)"OpenAmigaPrint - Print",WA_PubScreen,(ULONG)scr,WA_InnerWidth,620,WA_InnerHeight,238,WA_Gadgets,(ULONG)list,WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,WA_Activate,TRUE,WA_SimpleRefresh,TRUE,WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW|STRINGIDCMP|INTEGERIDCMP|CYCLEIDCMP|BUTTONIDCMP,TAG_END); if(!w){ret=0;goto out;}
     GT_RefreshWindow(w,NULL);draw_preview(w,pdf,status);
-    while(!done){struct IntuiMessage *m;Wait(1UL<<w->UserPort->mp_SigBit);while((m=GT_GetIMsg(w->UserPort))){ULONG cls=m->Class;UWORD id=m->IAddress?((struct Gadget *)m->IAddress)->GadgetID:0;GT_ReplyIMsg(m);if(cls==IDCMP_CLOSEWINDOW){done=1;break;}if(cls==IDCMP_REFRESHWINDOW){GT_BeginRefresh(w);GT_EndRefresh(w,TRUE);draw_preview(w,pdf,status);}else if(cls==IDCMP_GADGETUP){if(id==G_CANCEL){done=1;}else if(id==G_SAVE){save_as(w,pdf,status,sizeof(status));draw_preview(w,pdf,status);}else if(id==G_PRINT){ULONG v;STRPTR s;GT_GetGadgetAttrs(guri,w,NULL,GTST_String,(ULONG)&s,TAG_END);strncpy(o->printer_uri,s,sizeof(o->printer_uri)-1);o->printer_uri[sizeof(o->printer_uri)-1]=0;GT_GetGadgetAttrs(gcopy,w,NULL,GTIN_Number,(ULONG)&v,TAG_END);o->copies=v?v:1;GT_GetGadgetAttrs(gpaper,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->paper=v;GT_GetGadgetAttrs(gorient,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->orientation=v;GT_GetGadgetAttrs(gcolor,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->color=(v==0);GT_GetGadgetAttrs(gduplex,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->duplex=v;GT_GetGadgetAttrs(gpages,w,NULL,GTST_String,(ULONG)&s,TAG_END);parse_pages(s,o);snprintf(status,sizeof(status),"Sending PDF to printer...");draw_preview(w,pdf,status);oap_ipp_submit_pdf(pdf,o,status,sizeof(status));draw_preview(w,pdf,status);}}}}
+    while(!done){struct IntuiMessage *m;Wait(1UL<<w->UserPort->mp_SigBit);while((m=GT_GetIMsg(w->UserPort))){ULONG cls=m->Class;UWORD id=m->IAddress?((struct Gadget *)m->IAddress)->GadgetID:0;GT_ReplyIMsg(m);if(cls==IDCMP_CLOSEWINDOW){done=1;break;}if(cls==IDCMP_REFRESHWINDOW){GT_BeginRefresh(w);GT_EndRefresh(w,TRUE);draw_preview(w,pdf,status);}else if(cls==IDCMP_GADGETUP){if(id==G_CANCEL){done=1;}else if(id==G_SAVE){save_as(w,pdf,status,sizeof(status));draw_preview(w,pdf,status);}else if(id==G_PRINT){ULONG v;STRPTR s;GT_GetGadgetAttrs(guri,w,NULL,GTST_String,(ULONG)&s,TAG_END);strncpy(o->printer_uri,s,sizeof(o->printer_uri)-1);o->printer_uri[sizeof(o->printer_uri)-1]=0;GT_GetGadgetAttrs(gcopy,w,NULL,GTIN_Number,(ULONG)&v,TAG_END);o->copies=v?v:1;GT_GetGadgetAttrs(gpaper,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->paper=v;GT_GetGadgetAttrs(gorient,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->orientation=v;GT_GetGadgetAttrs(gcolor,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->color=(v==0);GT_GetGadgetAttrs(gduplex,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->duplex=v;GT_GetGadgetAttrs(gpages,w,NULL,GTST_String,(ULONG)&s,TAG_END);parse_pages(s,o);snprintf(status,sizeof(status),"Sending job to printer...");draw_preview(w,pdf,status);
+                    if(oap_ipp_submit_pdf(pdf,o,status,sizeof(status)))write_job_state(pdf,"submitted",o->printer_uri);
+                    else write_job_state(pdf,"failed",o->printer_uri);
+                    draw_preview(w,pdf,status);}}}}
 out:
     if(w)CloseWindow(w);if(list)FreeGadgets(list);if(vi)FreeVisualInfo(vi);if(scr)UnlockPubScreen(NULL,scr);if(AslBase)CloseLibrary(AslBase);if(GadToolsBase)CloseLibrary(GadToolsBase);if(GfxBase)CloseLibrary((struct Library *)GfxBase);if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);return ret;
 }
