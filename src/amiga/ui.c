@@ -1,4 +1,5 @@
 #include "oap.h"
+#include "oap_selection.h"
 #include "oav_jobs.h"
 #include <exec/types.h>
 #include <exec/libraries.h>
@@ -58,6 +59,7 @@ static struct Gadget *add_gad(struct Gadget *prev,struct Gadget **slot,int kind,
 int oap_run_print_dialog(const char *pdf,OAPJobOptions *o)
 {
     struct Screen *scr=NULL; APTR vi=NULL; struct Gadget *list=NULL,*last,*guri,*gcopy,*gpaper,*gorient,*gcolor,*gduplex,*gpages,*gprint,*gsave,*gcancel,*gbrowse;
+    OAPSelectionListener selection={0}; char pending_printer[384]="";
     struct Window *w=NULL; struct NewGadget ng; struct TextAttr ta={(STRPTR)"topaz.font",8,0,0}; char status[256]="Ready - PDF generated on Amiga"; int done=0,ret=1; char saved_uri[384]=""; int tick=0,busy=0; static char request[OAV_PATH_MAX]; static OAVRequest job;
     if(oap_selected_printer(saved_uri,sizeof(saved_uri))&&(!o->printer_uri[0]||strstr(o->printer_uri,"printer.local")))strcpy(o->printer_uri,saved_uri);
     IntuitionBase=(struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library",39); GfxBase=(struct GfxBase *)OpenLibrary((STRPTR)"graphics.library",39); GadToolsBase=OpenLibrary((STRPTR)"gadtools.library",39); AslBase=OpenLibrary((STRPTR)"asl.library",38);
@@ -79,10 +81,19 @@ int oap_run_print_dialog(const char *pdf,OAPJobOptions *o)
     if(!gbrowse||!guri||!gcopy||!gpaper||!gorient||!gcolor||!gduplex||!gpages||!gprint||!gsave||!gcancel){ret=0;goto out;}
     w=OpenWindowTags(NULL,WA_Title,(ULONG)"OpenAmigaPrint - Print",WA_PubScreen,(ULONG)scr,WA_InnerWidth,620,WA_InnerHeight,238,WA_Gadgets,(ULONG)list,WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,WA_Activate,TRUE,WA_SimpleRefresh,TRUE,WA_IDCMP,IDCMP_INTUITICKS|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW|STRINGIDCMP|INTEGERIDCMP|CYCLEIDCMP|BUTTONIDCMP,TAG_END); if(!w){ret=0;goto out;}
     GT_RefreshWindow(w,NULL);draw_preview(w,pdf,status);
+    oap_selection_open(&selection);
     request[0]=0;
     while(!done){
         struct IntuiMessage *m;
-        Wait(1UL<<w->UserPort->mp_SigBit);
+        Wait((1UL<<w->UserPort->mp_SigBit)|oap_selection_mask(&selection));
+        oap_selection_receive(&selection,pending_printer,sizeof(pending_printer));
+        if(!busy && pending_printer[0]){
+            strcpy(saved_uri,pending_printer);strcpy(o->printer_uri,pending_printer);
+            GT_SetGadgetAttrs(guri,w,NULL,GTST_String,(ULONG)o->printer_uri,TAG_END);
+            snprintf(status,sizeof(status),"Selected %s",o->printer_uri);
+            pending_printer[0]=0;
+            draw_preview(w,pdf,status);
+        }
         while((m=GT_GetIMsg(w->UserPort))){
             ULONG cls=m->Class;
             UWORD id=m->IAddress?((struct Gadget *)m->IAddress)->GadgetID:0;
@@ -145,5 +156,6 @@ int oap_run_print_dialog(const char *pdf,OAPJobOptions *o)
     }
 
 out:
+    oap_selection_close(&selection);
     if(w)CloseWindow(w);if(list)FreeGadgets(list);if(vi)FreeVisualInfo(vi);if(scr)UnlockPubScreen(NULL,scr);if(AslBase)CloseLibrary(AslBase);if(GadToolsBase)CloseLibrary(GadToolsBase);if(GfxBase)CloseLibrary((struct Library *)GfxBase);if(IntuitionBase)CloseLibrary((struct Library *)IntuitionBase);return ret;
 }
