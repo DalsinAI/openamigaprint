@@ -40,3 +40,20 @@ The regression suite covers exact MIME matching, missing capability attributes, 
 ## Protocol references
 
 DNS-SD records: RFC 6763. One-shot mDNS clients: RFC 6762 section 6.7. IPP Get-Printer-Attributes and document-format-supported: RFC 8011. Implementation and tests in this change are original BSD-2-Clause code.
+
+## 3 October follow-up: empty Show all list
+
+The host-side ACNet policy was found to reject the mDNS multicast destination.
+The narrow runtime fix and repeatable tests are in `integration/cradle/` and
+AmigaChrome commit e9e046f. The worker now checks every discovery send and exposes
+errors instead of reporting a successful zero-result scan. Completed scans report
+received/parsed packet counts. Opening the browser no longer prints a debug line
+that can cause an unnecessary Workbench output console.
+
+The build scripts now use strong library-base definitions (`-fno-common`) so the
+runtime does not pull in libnix's unintended window.library auto-opener. This
+preserves the explicit ReAction class/library lifecycle.
+
+The patched transport receives live responses; native Instance-23 networking
+startup remains a separate unresolved acceptance gate. Do not label this a
+successful native printer-discovery or physical-print test yet.
