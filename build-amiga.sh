@@ -4,6 +4,7 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 CC=${AMIGA_CC:-/home/da1ek/ACNet-compat-lab/toolchain/amiga/bin/m68k-amigaos-gcc}
 OUT="$ROOT/build/amigaos3"
 mkdir -p "$OUT"
+python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenAmigaPrintTool.info"
 "$CC" -m68000 -O2 -Wall -Wextra -Wno-pointer-sign -noixemul -I"$ROOT/include" \
   -o "$OUT/OpenAmigaPrint" \
   "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
