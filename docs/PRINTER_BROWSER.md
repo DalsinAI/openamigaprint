@@ -63,3 +63,10 @@ sequence. Physical job completion is still a separate, unverified gate.
 ## Print-window crash recovery
 
 See `PRINT_RECOVERY_AND_DOCUMENTS.md`. Print submission now uses `C:OAVWorker`; install it with the matching application build. Recovery, request-option preservation and host transport tests do not constitute a physical-print pass.
+
+## Explicit selection events
+
+Use Printer now verifies the saved ENV:/ENVARC: value and notifies every open
+print/viewer subscriber, including when the same printer is selected again.
+It no longer relies solely on comparing saved URI strings on window ticks.
+See PRINTER_SELECTION_HANDOFF.md for the reproduced failure and native test.
