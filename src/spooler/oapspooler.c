@@ -9,26 +9,44 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include "oap_spooler.h"
+#include "oap_queue.h"
 
 static BPTR spool_file;
 static ULONG spool_bytes;
 static UWORD sequence;
-static char spool_path[48];
+static char spool_path[80];
+static char meta_path[80];
 static char tail[8];
 static UBYTE tail_len;
 
+static int ensure_dir(const char *path)
+{
+    BPTR l=Lock((STRPTR)path,ACCESS_READ);
+    if(l){UnLock(l);return 1;}
+    l=CreateDir((STRPTR)path);if(!l)return 0;UnLock(l);return 1;
+}
+static int ensure_queue_dir(void)
+{
+    return ensure_dir(OAP_QUEUE_ROOT)&&ensure_dir(OAP_QUEUE_DIR);
+}
 static void make_path(void)
 {
-    static const char hex[]="0123456789ABCDEF";
-    char *p=spool_path;const char *s="T:OpenAmigaPrint-job-";UWORD v=++sequence;
-    while(*s)*p++=*s++;
-    *p++=hex[(v>>12)&15];*p++=hex[(v>>8)&15];*p++=hex[(v>>4)&15];*p++=hex[v&15];
-    s=".pdf";while(*s)*p++=*s++;*p=0;
+    static const char hex[]="0123456789ABCDEF";BPTR l;
+    do {
+        char *p=spool_path;const char *s=OAP_QUEUE_DIR "/" OAP_QUEUE_PREFIX;UWORD v=++sequence;
+        while(*s)*p++=*s++;
+        *p++=hex[(v>>12)&15];*p++=hex[(v>>8)&15];*p++=hex[(v>>4)&15];*p++=hex[v&15];
+        s=".pdf";while(*s)*p++=*s++;*p=0;
+        l=Lock((STRPTR)spool_path,ACCESS_READ);if(l)UnLock(l);
+    } while(l);
+    {char *p=meta_path;const char *s=spool_path;while(*s)*p++=*s++;p-=4;s=".job";while(*s)*p++=*s++;*p=0;}
 }
+
 static void close_spool(void){if(spool_file){Close(spool_file);spool_file=0;}}
 static int ensure_spool(void)
 {
     if(spool_file)return 1;
+    if(!ensure_queue_dir())return 0;
     make_path();spool_file=Open((STRPTR)spool_path,MODE_NEWFILE);spool_bytes=0;tail_len=0;
     return spool_file!=0;
 }
@@ -47,21 +65,25 @@ static int ends_pdf(void)
     for(i=0;i<=tail_len-5;i++){for(j=0;j<5&&tail[i+j]==eof[j];j++);if(j==5)return 1;}
     return 0;
 }
-static void launch_job(void)
+static LONG cstrlen(const char *s){LONG n=0;while(s&&s[n])n++;return n;}
+static void write_str(BPTR f,const char *s){LONG n=cstrlen(s);if(n)Write(f,(APTR)s,n);}
+static void write_ulong(BPTR f,ULONG v)
 {
-    char cmd[96];char *d=cmd;const char *s="C:OpenAmigaPrint ";struct TagItem tags[2];
-    while(*s)*d++=*s++;
-    s=spool_path;
-    while(*s&&d<cmd+sizeof(cmd)-1)*d++=*s++;
-    *d=0;
-    tags[0].ti_Tag=SYS_Asynch;tags[0].ti_Data=TRUE;
-    tags[1].ti_Tag=TAG_DONE;tags[1].ti_Data=0;
-    SystemTagList((STRPTR)cmd,tags);
+    char b[11];int n=0,i;if(!v){Write(f,(APTR)"0",1);return;}
+    while(v&&n<10){b[n++]=(char)('0'+(v%10));v/=10;}
+    for(i=n-1;i>=0;i--)Write(f,(APTR)&b[i],1);
+}
+static void write_metadata(void)
+{
+    BPTR f=Open((STRPTR)meta_path,MODE_NEWFILE);
+    if(!f)return;
+    write_str(f,"state=" OAP_QUEUE_STATE_QUEUED "\nbytes=");write_ulong(f,spool_bytes);
+    write_str(f,"\npdf=");write_str(f,spool_path);write_str(f,"\n");Close(f);
 }
 static void finish_job(void)
 {
     if(!spool_file||!spool_bytes)return;
-    close_spool();launch_job();spool_bytes=0;tail_len=0;
+    close_spool();write_metadata();spool_bytes=0;tail_len=0;
 }
 static void handle(struct IOStdReq *io)
 {
@@ -76,7 +98,7 @@ static void handle(struct IOStdReq *io)
         if(ends_pdf())finish_job();
         break;
     case CMD_RESET:
-        if(spool_file){close_spool();DeleteFile((STRPTR)spool_path);}
+        if(spool_file){close_spool();DeleteFile((STRPTR)spool_path);DeleteFile((STRPTR)meta_path);}
         spool_bytes=0;tail_len=0;break;
     case CMD_FLUSH:
     case CMD_UPDATE:
@@ -96,9 +118,7 @@ int main(void)
     port->mp_Node.ln_Name=(char *)OAP_SPOOLER_PORT;
     AddPort(port);
     if(me)me->pr_WindowPtr=(APTR)-1;
-    for(;;){
-        WaitPort(port);
-        while((msg=GetMsg(port))!=NULL)handle((struct IOStdReq *)msg);
-    }
+    ensure_queue_dir();
+    for(;;){WaitPort(port);while((msg=GetMsg(port))!=NULL)handle((struct IOStdReq *)msg);}
     return 0;
 }

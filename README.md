@@ -106,3 +106,15 @@ Plain IPP is first light. IPPS will be added behind a TLS abstraction rather tha
 ## Licence
 
 OpenAmigaPrint source is intended to be freely distributable under the BSD 2-Clause licence. The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
+
+## Queue and graphics printing
+
+OpenAmigaPrint now treats completed printer jobs as durable queue entries rather than transient one-shot files.
+
+- Install `OAPSpooler` as a Workbench-startup tool (`SYS:WBStartup/OAPSpooler`) with `DONOTWAIT`.
+- The spooler stores completed jobs under `SYS:Spool/OpenAmigaPrint/` as a PDF spool artifact plus a `.job` metadata record.
+- Run `OpenAmigaPrint` with no arguments (or `OpenAmigaPrint QUEUE`) to open the native queue window.
+- Selecting **Open** on a queued job opens the native per-job window, where the job can be saved/exported or sent to an IPP printer.
+- `OAPImageTest` exercises the real `PRD_DUMPRPORT` graphics path. By default it prints a full-width, aspect-correct, centered colour test card; pass `1TO1` for a diagnostic unscaled dump.
+
+The classic printer-driver graphics path uses the canonical ExecBase pointer at absolute address 4, as required by traditional Amiga printer-driver init glue. Raster transfer honours `pi_xpos` and `pi_ScaleX`, so printer.device controls rotation, centering and scaling according to the active printer preferences.
