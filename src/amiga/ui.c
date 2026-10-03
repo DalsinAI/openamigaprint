@@ -19,7 +19,7 @@ struct Library *GadToolsBase,*AslBase;
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 
-enum { G_URI=1,G_COPIES,G_PAPER,G_ORIENT,G_COLOR,G_DUPLEX,G_PAGES,G_PRINT,G_SAVE,G_CANCEL };
+enum { G_URI=1,G_COPIES,G_PAPER,G_ORIENT,G_COLOR,G_DUPLEX,G_PAGES,G_PRINT,G_SAVE,G_CANCEL,G_BROWSE };
 static STRPTR paper_labels[]={ (STRPTR)"A4",(STRPTR)"Letter",NULL };
 static STRPTR orient_labels[]={ (STRPTR)"Portrait",(STRPTR)"Landscape",NULL };
 static STRPTR color_labels[]={ (STRPTR)"Colour",(STRPTR)"Monochrome",NULL };
@@ -64,13 +64,15 @@ static struct Gadget *add_gad(struct Gadget *prev,struct Gadget **slot,int kind,
 
 int oap_run_print_dialog(const char *pdf,OAPJobOptions *o)
 {
-    struct Screen *scr=NULL; APTR vi=NULL; struct Gadget *list=NULL,*last,*guri,*gcopy,*gpaper,*gorient,*gcolor,*gduplex,*gpages,*gprint,*gsave,*gcancel;
-    struct Window *w=NULL; struct NewGadget ng; struct TextAttr ta={(STRPTR)"topaz.font",8,0,0}; char status[96]="Ready - PDF generated on Amiga"; int done=0,ret=1;
+    struct Screen *scr=NULL; APTR vi=NULL; struct Gadget *list=NULL,*last,*guri,*gcopy,*gpaper,*gorient,*gcolor,*gduplex,*gpages,*gprint,*gsave,*gcancel,*gbrowse;
+    struct Window *w=NULL; struct NewGadget ng; struct TextAttr ta={(STRPTR)"topaz.font",8,0,0}; char status[96]="Ready - PDF generated on Amiga"; int done=0,ret=1; char saved_uri[384]=""; int tick=0;
+    if(oap_selected_printer(saved_uri,sizeof(saved_uri))&&(!o->printer_uri[0]||strstr(o->printer_uri,"printer.local")))strcpy(o->printer_uri,saved_uri);
     IntuitionBase=(struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library",39); GfxBase=(struct GfxBase *)OpenLibrary((STRPTR)"graphics.library",39); GadToolsBase=OpenLibrary((STRPTR)"gadtools.library",39); AslBase=OpenLibrary((STRPTR)"asl.library",38);
     if(!IntuitionBase||!GfxBase||!GadToolsBase||!AslBase){ret=0;goto out;} scr=LockPubScreen(NULL);if(!scr){ret=0;goto out;}vi=GetVisualInfoA(scr,NULL);if(!vi){ret=0;goto out;}
     memset(&ng,0,sizeof(ng));ng.ng_TextAttr=&ta;ng.ng_VisualInfo=vi;last=CreateContext(&list);
 #define NG(ID,T,L,W,H) do{ng.ng_GadgetID=(ID);ng.ng_GadgetText=(STRPTR)(T);ng.ng_LeftEdge=(L);ng.ng_TopEdge=(W);ng.ng_Width=(H);ng.ng_Height=14;ng.ng_Flags=PLACETEXT_LEFT;}while(0)
-    NG(G_URI,"Printer",382,12,220); last=add_gad(last,&guri,STRING_KIND,&ng,GTST_String,(ULONG)o->printer_uri,GTST_MaxChars,383);
+    NG(G_URI,"Printer",382,12,130); last=add_gad(last,&guri,STRING_KIND,&ng,GTST_String,(ULONG)o->printer_uri,GTST_MaxChars,383);
+    ng.ng_Flags=0;ng.ng_LeftEdge=524;ng.ng_TopEdge=12;ng.ng_Width=78;ng.ng_Height=16;ng.ng_GadgetID=G_BROWSE;ng.ng_GadgetText=(STRPTR)"Browse...";last=gbrowse=CreateGadget(BUTTON_KIND,last,&ng,TAG_END);
     NG(G_COPIES,"Copies",382,38,70); last=add_gad(last,&gcopy,INTEGER_KIND,&ng,GTIN_Number,o->copies,GTIN_MaxChars,3);
     NG(G_PAPER,"Paper",532,38,70); last=add_gad(last,&gpaper,CYCLE_KIND,&ng,GTCY_Labels,(ULONG)paper_labels,GTCY_Active,o->paper);
     NG(G_ORIENT,"Layout",382,64,100); last=add_gad(last,&gorient,CYCLE_KIND,&ng,GTCY_Labels,(ULONG)orient_labels,GTCY_Active,o->orientation);
@@ -81,10 +83,10 @@ int oap_run_print_dialog(const char *pdf,OAPJobOptions *o)
     ng.ng_Flags=0;ng.ng_GadgetText=(STRPTR)"Print";ng.ng_GadgetID=G_PRINT;ng.ng_LeftEdge=350;ng.ng_TopEdge=164;ng.ng_Width=78;ng.ng_Height=18;last=gprint=CreateGadget(BUTTON_KIND,last,&ng,TAG_END);
     ng.ng_GadgetText=(STRPTR)"Save PDF";ng.ng_GadgetID=G_SAVE;ng.ng_LeftEdge=440;ng.ng_Width=78;last=gsave=CreateGadget(BUTTON_KIND,last,&ng,TAG_END);
     ng.ng_GadgetText=(STRPTR)"Cancel";ng.ng_GadgetID=G_CANCEL;ng.ng_LeftEdge=530;ng.ng_Width=72;last=gcancel=CreateGadget(BUTTON_KIND,last,&ng,TAG_END);
-    if(!guri||!gcopy||!gpaper||!gorient||!gcolor||!gduplex||!gpages||!gprint||!gsave||!gcancel){ret=0;goto out;}
-    w=OpenWindowTags(NULL,WA_Title,(ULONG)"OpenAmigaPrint - Print",WA_PubScreen,(ULONG)scr,WA_InnerWidth,620,WA_InnerHeight,238,WA_Gadgets,(ULONG)list,WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,WA_Activate,TRUE,WA_SimpleRefresh,TRUE,WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW|STRINGIDCMP|INTEGERIDCMP|CYCLEIDCMP|BUTTONIDCMP,TAG_END); if(!w){ret=0;goto out;}
+    if(!gbrowse||!guri||!gcopy||!gpaper||!gorient||!gcolor||!gduplex||!gpages||!gprint||!gsave||!gcancel){ret=0;goto out;}
+    w=OpenWindowTags(NULL,WA_Title,(ULONG)"OpenAmigaPrint - Print",WA_PubScreen,(ULONG)scr,WA_InnerWidth,620,WA_InnerHeight,238,WA_Gadgets,(ULONG)list,WA_DragBar,TRUE,WA_DepthGadget,TRUE,WA_CloseGadget,TRUE,WA_Activate,TRUE,WA_SimpleRefresh,TRUE,WA_IDCMP,IDCMP_INTUITICKS|IDCMP_CLOSEWINDOW|IDCMP_REFRESHWINDOW|STRINGIDCMP|INTEGERIDCMP|CYCLEIDCMP|BUTTONIDCMP,TAG_END); if(!w){ret=0;goto out;}
     GT_RefreshWindow(w,NULL);draw_preview(w,pdf,status);
-    while(!done){struct IntuiMessage *m;Wait(1UL<<w->UserPort->mp_SigBit);while((m=GT_GetIMsg(w->UserPort))){ULONG cls=m->Class;UWORD id=m->IAddress?((struct Gadget *)m->IAddress)->GadgetID:0;GT_ReplyIMsg(m);if(cls==IDCMP_CLOSEWINDOW){done=1;break;}if(cls==IDCMP_REFRESHWINDOW){GT_BeginRefresh(w);GT_EndRefresh(w,TRUE);draw_preview(w,pdf,status);}else if(cls==IDCMP_GADGETUP){if(id==G_CANCEL){done=1;}else if(id==G_SAVE){save_as(w,pdf,status,sizeof(status));draw_preview(w,pdf,status);}else if(id==G_PRINT){ULONG v;STRPTR s;GT_GetGadgetAttrs(guri,w,NULL,GTST_String,(ULONG)&s,TAG_END);strncpy(o->printer_uri,s,sizeof(o->printer_uri)-1);o->printer_uri[sizeof(o->printer_uri)-1]=0;GT_GetGadgetAttrs(gcopy,w,NULL,GTIN_Number,(ULONG)&v,TAG_END);o->copies=v?v:1;GT_GetGadgetAttrs(gpaper,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->paper=v;GT_GetGadgetAttrs(gorient,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->orientation=v;GT_GetGadgetAttrs(gcolor,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->color=(v==0);GT_GetGadgetAttrs(gduplex,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->duplex=v;GT_GetGadgetAttrs(gpages,w,NULL,GTST_String,(ULONG)&s,TAG_END);parse_pages(s,o);snprintf(status,sizeof(status),"Sending job to printer...");draw_preview(w,pdf,status);
+    while(!done){struct IntuiMessage *m;Wait(1UL<<w->UserPort->mp_SigBit);while((m=GT_GetIMsg(w->UserPort))){ULONG cls=m->Class;UWORD id=m->IAddress?((struct Gadget *)m->IAddress)->GadgetID:0;GT_ReplyIMsg(m);if(cls==IDCMP_CLOSEWINDOW){done=1;break;}if(cls==IDCMP_INTUITICKS&&++tick>=5){char selected[384];tick=0;if(oap_selected_printer(selected,sizeof(selected))&&strcmp(selected,saved_uri)){strcpy(saved_uri,selected);strcpy(o->printer_uri,selected);GT_SetGadgetAttrs(guri,w,NULL,GTST_String,(ULONG)selected,TAG_END);snprintf(status,sizeof(status),"PDF printer selected; Print rechecks its capabilities");draw_preview(w,pdf,status);}}else if(cls==IDCMP_REFRESHWINDOW){GT_BeginRefresh(w);GT_EndRefresh(w,TRUE);draw_preview(w,pdf,status);}else if(cls==IDCMP_GADGETUP){if(id==G_BROWSE){snprintf(status,sizeof(status),oap_launch_printer_browser()?"Choose a verified PDF printer in Browse":"Cannot launch C:OAPPrinters");draw_preview(w,pdf,status);}else if(id==G_CANCEL){done=1;}else if(id==G_SAVE){save_as(w,pdf,status,sizeof(status));draw_preview(w,pdf,status);}else if(id==G_PRINT){ULONG v;STRPTR s;GT_GetGadgetAttrs(guri,w,NULL,GTST_String,(ULONG)&s,TAG_END);strncpy(o->printer_uri,s,sizeof(o->printer_uri)-1);o->printer_uri[sizeof(o->printer_uri)-1]=0;GT_GetGadgetAttrs(gcopy,w,NULL,GTIN_Number,(ULONG)&v,TAG_END);o->copies=v?v:1;GT_GetGadgetAttrs(gpaper,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->paper=v;GT_GetGadgetAttrs(gorient,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->orientation=v;GT_GetGadgetAttrs(gcolor,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->color=(v==0);GT_GetGadgetAttrs(gduplex,w,NULL,GTCY_Active,(ULONG)&v,TAG_END);o->duplex=v;GT_GetGadgetAttrs(gpages,w,NULL,GTST_String,(ULONG)&s,TAG_END);parse_pages(s,o);snprintf(status,sizeof(status),"Sending job to printer...");draw_preview(w,pdf,status);
                     if(oap_ipp_submit_pdf(pdf,o,status,sizeof(status)))write_job_state(pdf,"submitted",o->printer_uri);
                     else write_job_state(pdf,"failed",o->printer_uri);
                     draw_preview(w,pdf,status);}}}}
