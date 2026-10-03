@@ -215,7 +215,8 @@ void PRT_STDARGS oap_close(struct IORequest *ior)
 LONG PRT_STDARGS oap_conv(STRPTR buf,TEXT c,LONG crlf)
 {
     (void)buf;(void)crlf;
-    if(c=='\n')return -1;
+    /* aIND/aNEL already translated the line feed into PDF text movement. */
+    if(c=='\n')return 0;
     if(c=='\r')return 0;
     if(c=='\014'){end_page();return 0;}
     if(c=='\t'){text_char(' ');text_char(' ');text_char(' ');text_char(' ');return 0;}
@@ -233,7 +234,8 @@ LONG PRT_STDARGS oap_special(UWORD *command,UBYTE out[],BYTE *pos,BYTE *spacing,
     case aRIS:break;
     default:break;
     }
-    return -2;
+    /* All printer control commands are consumed here.  Never leak them into PDF. */
+    return 0;
 }
 static LONG render_preinit(struct IODRPReq *io,LONG flags)
 {
