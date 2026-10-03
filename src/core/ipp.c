@@ -13,8 +13,12 @@ static int attr_i(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,un
 int oap_parse_ipp_uri(const char *uri,OAPUri *out)
 {
     const char *p,*slash,*colon; size_t hn;
-    if(!uri||!out||strncmp(uri,"ipp://",6)!=0)return 0;
-    memset(out,0,sizeof(*out)); out->port=631; p=uri+6; slash=strchr(p,'/');
+    if(!uri||!out)return 0;
+    memset(out,0,sizeof(*out));
+    if(!strncmp(uri,"ipp://",6)){p=uri+6;out->secure=0;}
+    else if(!strncmp(uri,"ipps://",7)){p=uri+7;out->secure=1;}
+    else return 0;
+    out->port=631; slash=strchr(p,'/');
     if(!slash)slash=p+strlen(p);
     colon=NULL;
     { const char *q; for(q=p;q<slash;q++) if(*q==':') colon=q; }

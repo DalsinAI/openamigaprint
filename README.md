@@ -19,7 +19,7 @@ C:OpenAmigaPrint
     |
     +-- Save PDF
     +-- native Amiga print window
-    +-- IPP over bsdsocket.library
+    +-- IPP/IPPS over bsdsocket.library
 ```
 
 There is no AmigaChrome dependency in the core stack.
@@ -35,6 +35,7 @@ Implemented and building for 68000-class AmigaOS 3.x:
 - native GadTools/ASL print window;
 - Save PDF;
 - plain `ipp://` Print-Job submission through `bsdsocket.library`;
+- optional `ipps://` transport through AmiSSL v5 with peer and hostname verification;
 - copies, A4/Letter, portrait/landscape, colour/mono, duplex and page-range IPP attributes;
 - host IPP/PDF codec tests;
 - Amiga spool and printer.device smoke-test programs.
@@ -47,7 +48,6 @@ The following are intentionally not claimed by first light:
 - real PDF page rendering inside the preview pane;
 - IPP printer discovery with DNS-SD/mDNS;
 - Get-Printer-Attributes capability negotiation;
-- IPPS/TLS;
 - PWG Raster fallback for printers that do not accept PDF;
 - complete mapping of every classic text-style command;
 - broad application compatibility testing;
@@ -64,10 +64,16 @@ Host core:
 make test
 ```
 
-Classic AmigaOS 3.x:
+Classic AmigaOS 3.x, plain IPP:
 
 ```sh
 ./build-amiga.sh
+```
+
+Enable IPPS by pointing the build at an AmiSSL v5 Developer directory:
+
+```sh
+AMISSL_SDK=/path/to/AmiSSL/Developer ./build-amiga.sh
 ```
 ## First-light Amiga installation
 
@@ -92,15 +98,18 @@ Then `OAPPrintTest` exercises the ordinary `printer.device` path.
 The generated PDF is spooled under `T:OpenAmigaPrint-job-XXXX.pdf`; once `%%EOF` is received, `oapspool.device` launches `C:OpenAmigaPrint` asynchronously.
 ## Network model
 
-The current first-light client accepts a manual URI such as:
+The client accepts manual printer URIs such as:
 
 ```
 ipp://192.168.1.50:631/ipp/print
+ipps://printer.example.net:631/ipp/print
 ```
 
 Networking is exclusively through the public `bsdsocket.library` API. Roadshow, AmiTCP, Miami, Genesis, ACNet or another compatible provider can supply that API.
 
-Plain IPP is first light. IPPS will be added behind a TLS abstraction rather than making one network stack mandatory.
+IPPS is optional. AmiSSL v5 is loaded only for `ipps://` jobs, with SNI, trust-store validation and hostname verification. Plain IPP continues to work without AmiSSL.
+
+The IPPS first-light gate was exercised on AmigaOS 3.2.3 using ACNet's `bsdsocket.library` and AmiSSL 5.27: a trusted endpoint completed TLS and reached HTTP, while a deliberate hostname mismatch was rejected with X509 verify result 62.
 
 ## Licence
 
