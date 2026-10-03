@@ -7,7 +7,7 @@ mkdir -p "$OUT"
 "$CC" -m68000 -O2 -Wall -Wextra -Wno-pointer-sign -noixemul -I"$ROOT/include" \
   -o "$OUT/OpenAmigaPrint" \
   "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
-  "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/main.c" -lamiga
+  "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/amiga/ui.c" "$ROOT/src/amiga/queue_ui.c" "$ROOT/src/amiga/main.c" -lamiga
 file "$OUT/OpenAmigaPrint"
 wc -c "$OUT/OpenAmigaPrint"
 
@@ -30,3 +30,6 @@ wc -c "$OUT/OpenAmigaPrint.driver"
 "$CC" -m68000 -O2 -Wall -Wextra -Werror -noixemul   -o "$OUT/oapprinttest" "$ROOT/tests/oapprinttest.c"
 file "$OUT/oapprinttest"
 wc -c "$OUT/oapprinttest"
+"$CC" -m68000 -O2 -Wall -Wextra -Werror -noixemul -I"$ROOT/include" -o "$OUT/oapimagetest" "$ROOT/tests/oapimagetest.c" -lamiga
+file "$OUT/oapimagetest"
+wc -c "$OUT/oapimagetest"
