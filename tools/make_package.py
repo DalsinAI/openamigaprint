@@ -300,7 +300,7 @@ Trying it
 Nothing is sent to a printer until you click Print in the Print window. An
 upload whose outcome is unclear is never sent a second time by itself.
 
-Licence: BSD 2-Clause (see the source repository).
+Licence: MIT, Copyright (c) 2026 Dalsin Limited (see the source repository).
 """
 
 

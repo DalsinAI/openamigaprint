@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* Bounded DNS-SD/IPP codec. Network labels remain wire encoded. */
 #include "oap_discovery.h"
 #include <stdio.h>

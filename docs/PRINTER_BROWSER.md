@@ -39,7 +39,7 @@ The regression suite covers exact MIME matching, missing capability attributes, 
 
 ## Protocol references
 
-DNS-SD records: RFC 6763. One-shot mDNS clients: RFC 6762 section 6.7. IPP Get-Printer-Attributes and document-format-supported: RFC 8011. Implementation and tests in this change are original BSD-2-Clause code.
+DNS-SD records: RFC 6763. One-shot mDNS clients: RFC 6762 section 6.7. IPP Get-Printer-Attributes and document-format-supported: RFC 8011. Implementation and tests in this change are original code, under OpenAmigaPrint's MIT licence.
 
 ## 3 October follow-up: empty Show all list
 

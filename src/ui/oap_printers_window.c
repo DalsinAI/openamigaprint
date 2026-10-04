@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* OpenAmigaPrint's Printers and Queue window (C:OAPPrinters), in GadTools
  * (Dale, 4 October 2026: OS 3.x applications use GadTools or MUI, not
  * ReAction). It replaces the separate printer browser and queue window, as

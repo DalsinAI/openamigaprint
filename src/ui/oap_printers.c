@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* The printers OpenAmigaPrint knows (include/oap_printers.h). */
 #include "oap_printers.h"
 #include "oap_discovery.h"
