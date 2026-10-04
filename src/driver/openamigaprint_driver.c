@@ -43,7 +43,7 @@ static ULONG g_content_start;
 static UWORD g_page_w, g_page_h;
 static UWORD g_dpi;
 static UWORD g_img_w, g_img_h;
-static ULONG g_img_row_len;
+static ULONG g_img_row_len, g_img_row_cap;
 static UBYTE g_doc_open, g_page_open, g_text_open, g_img_open;
 
 static ULONG slen(const char *s)
@@ -93,7 +93,7 @@ static void reset_state(void)
     UWORD i;
     g_offset=0;g_next_obj=4;g_page_count=0;
     g_doc_open=g_page_open=g_text_open=g_img_open=0;
-    g_img_w=g_img_h=0;g_img_row_len=0;g_dpi=300;
+    g_img_w=g_img_h=0;g_img_row_len=g_img_row_cap=0;g_dpi=300;
     for(i=0;i<OAP_MAX_OBJECTS;i++)g_obj_offset[i]=0;
     geometry();
 }
@@ -199,7 +199,13 @@ LONG PRT_STDARGS oap_init(struct PrinterData *pd)
      * a non-zero value as unit-initialisation failure.  Do not let a C tail
      * call leak geometry()/reset_state()'s working value into D0.
      */
-    PD=pd;SysBase=pd->pd_Device.dd_ExecBase;reset_state();
+    PD=pd;
+    /* Classic printer-driver init glue obtains ExecBase from _AbsExecBase
+     * (the canonical pointer stored at absolute address 4), not from
+     * PrinterData.  OS 3.2.x leaves pd_Device.dd_ExecBase clear here. */
+    SysBase=*(struct ExecBase * volatile *)4;
+    if(!SysBase&&pd->pd_Device.dd_ExecBase)SysBase=(struct ExecBase *)pd->pd_Device.dd_ExecBase;
+    reset_state();
     return 0;
 }
 void PRT_STDARGS oap_expunge(void){PD=0;}
@@ -210,7 +216,7 @@ int PRT_STDARGS oap_open(struct IORequest *ior)
 void PRT_STDARGS oap_close(struct IORequest *ior)
 {
     (void)ior;finish_doc();
-    if(PD&&PD->pd_PrintBuf){FreeMem(PD->pd_PrintBuf,g_img_row_len+2);PD->pd_PrintBuf=0;}
+    if(PD&&PD->pd_PrintBuf){FreeMem(PD->pd_PrintBuf,g_img_row_cap);PD->pd_PrintBuf=0;}
 }
 LONG PRT_STDARGS oap_conv(STRPTR buf,TEXT c,LONG crlf)
 {
@@ -253,8 +259,9 @@ static LONG render_init(struct IODRPReq *io,LONG width,LONG height)
     (void)io;if(width<=0||height<=0)return PDERR_BADDIMENSION;
     begin_page();close_text();
     g_img_w=(UWORD)width;g_img_h=(UWORD)height;
-    g_img_row_len=(ULONG)g_img_w*6+1;
-    PD->pd_PrintBuf=AllocMem(g_img_row_len+2,MEMF_ANY);
+    g_img_row_cap=(ULONG)g_img_w*6+1;
+    g_img_row_len=g_img_row_cap;
+    PD->pd_PrintBuf=AllocMem(g_img_row_cap,MEMF_PUBLIC);
     if(!PD->pd_PrintBuf)return PDERR_BUFFERMEMORY;
     draw_w=(g_page_w>80)?g_page_w-80:g_page_w;
     draw_h=draw_w*(ULONG)g_img_h/g_img_w;
@@ -265,41 +272,69 @@ static LONG render_init(struct IODRPReq *io,LONG width,LONG height)
     pw(" /CS /RGB /BPC 8 /F /AHx ID\n");
     g_img_open=1;return PDERR_NOERR;
 }
-static LONG render_transfer(struct PrtInfo *pi)
+static void put_rgb_hex(UBYTE *dst,ULONG *pos,UBYTE r4,UBYTE g4,UBYTE b4)
 {
-    ULONG i,p=0;union colorEntry *src;
-    if(!pi||!PD->pd_PrintBuf)return PDERR_CANCEL;
-    src=pi->pi_ColorInt;
-    for(i=0;i<g_img_w;i++,src++){
-        UBYTE r=src->colorByte[PCMRED],g=src->colorByte[PCMGREEN],b=src->colorByte[PCMBLUE];
-        PD->pd_PrintBuf[p++]=hx(r>>4);PD->pd_PrintBuf[p++]=hx(r);
-        PD->pd_PrintBuf[p++]=hx(g>>4);PD->pd_PrintBuf[p++]=hx(g);
-        PD->pd_PrintBuf[p++]=hx(b>>4);PD->pd_PrintBuf[p++]=hx(b);
-    }
-    PD->pd_PrintBuf[p++]='\n';g_img_row_len=p;return PDERR_NOERR;
+    UBYTE r=(UBYTE)((r4&15)*17),g=(UBYTE)((g4&15)*17),b=(UBYTE)((b4&15)*17);
+    dst[(*pos)++]=hx(r>>4);dst[(*pos)++]=hx(r);
+    dst[(*pos)++]=hx(g>>4);dst[(*pos)++]=hx(g);
+    dst[(*pos)++]=hx(b>>4);dst[(*pos)++]=hx(b);
 }
-static LONG render_flush(void)
+static LONG render_clear(void)
 {
+    ULONG i;if(!PD->pd_PrintBuf||!g_img_row_cap)return PDERR_CANCEL;
+    for(i=0;i+1<g_img_row_cap;i++)PD->pd_PrintBuf[i]='F';
+    PD->pd_PrintBuf[g_img_row_cap-1]='\n';g_img_row_len=g_img_row_cap;
+    return PDERR_NOERR;
+}
+static LONG render_transfer(struct PrtInfo *pi,LONG row)
+{
+    ULONG src_i,out,p,i;union colorEntry *src;UWORD *scale;
+    (void)row;
+    if(!pi||!PD->pd_PrintBuf||!pi->pi_ColorInt)return PDERR_CANCEL;
+    /* printer.device supplies a full destination row and pi_xpos tells the
+     * driver where the scaled source begins (for centering/margins). */
+    for(i=0;i+1<g_img_row_cap;i++)PD->pd_PrintBuf[i]='F';
+    PD->pd_PrintBuf[g_img_row_cap-1]='\n';
+    out=pi->pi_xpos;if(out>g_img_w)out=g_img_w;p=out*6;
+    src=pi->pi_ColorInt;scale=pi->pi_ScaleX;
+    for(src_i=0;src_i<pi->pi_width && out<g_img_w;src_i++,src++){
+        UWORD repeat=scale?scale[src_i]:1;UWORD n;
+        UBYTE r=src->colorByte[PCMRED],g=src->colorByte[PCMGREEN],b=src->colorByte[PCMBLUE];
+        if(!repeat)repeat=1;
+        for(n=0;n<repeat && out<g_img_w;n++,out++)put_rgb_hex(PD->pd_PrintBuf,&p,r,g,b);
+    }
+    g_img_row_len=g_img_row_cap;
+    return PDERR_NOERR;
+}
+static LONG render_flush(LONG rows)
+{
+    if(rows<=0)return PDERR_NOERR;
     if(PD->pd_PrintBuf&&g_img_row_len)pw_n(PD->pd_PrintBuf,g_img_row_len);
     return PDERR_NOERR;
 }
-static LONG render_close(ULONG flags)
+static LONG render_close(LONG error,ULONG flags)
 {
-    if(g_img_open){pw(">\nEI\nQ\n");g_img_open=0;}
-    if(PD->pd_PrintBuf){FreeMem(PD->pd_PrintBuf,(ULONG)g_img_w*6+3);PD->pd_PrintBuf=0;}
-    g_img_row_len=0;
-    if(!(flags&SPECIAL_NOFORMFEED))end_page();
+    if(error!=PDERR_CANCEL){
+        if(g_img_open){pw(">\nEI\nQ\n");g_img_open=0;}
+        if(!(flags&SPECIAL_NOFORMFEED))end_page();
+    } else {
+        g_img_open=0;g_page_open=0;g_text_open=0;g_doc_open=0;
+    }
+    if(PD)PD->pd_PBothReady();
+    if(PD&&PD->pd_PrintBuf){FreeMem(PD->pd_PrintBuf,g_img_row_cap);PD->pd_PrintBuf=0;}
+    g_img_row_len=g_img_row_cap=0;
     return PDERR_NOERR;
 }
+
 LONG PRT_STDARGS oap_render(LONG ct,LONG x,LONG y,LONG status,...)
 {
     switch(status){
     case OAP_PRS_PREINIT:return render_preinit((struct IODRPReq *)ct,x);
     case OAP_PRS_INIT:return render_init((struct IODRPReq *)ct,x,y);
-    case OAP_PRS_TRANSFER:return render_transfer((struct PrtInfo *)ct);
-    case OAP_PRS_FLUSH:return render_flush();
-    case OAP_PRS_CLEAR:return PDERR_NOERR;
-    case OAP_PRS_CLOSE:return render_close((ULONG)x);
+    case OAP_PRS_TRANSFER:return render_transfer((struct PrtInfo *)ct,y);
+    case OAP_PRS_FLUSH:return render_flush(y);
+    case OAP_PRS_CLEAR:return render_clear();
+    case OAP_PRS_CLOSE:return render_close(ct,(ULONG)x);
     default:return PDERR_NOERR;
     }
 }
