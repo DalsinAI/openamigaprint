@@ -32,6 +32,7 @@ int oap_pdf_write_demo(const char *path, const char *title);
 #ifdef __amigaos__
 int oap_ipp_submit_pdf(const char *pdf_path,const OAPJobOptions *o,char *status,size_t status_len);
 int oap_run_print_dialog(const char *pdf_path,OAPJobOptions *o);
+int oap_run_queue_window(void);
 #endif
 
 #endif
