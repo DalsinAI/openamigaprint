@@ -42,3 +42,7 @@ wc -c "$OUT/oapimagetest"
   "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" \
   "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/amiga/ipp_transport.c" -lamiga
 file "$OUT/OAVWorker"
+
+python3 "$ROOT/tools/make_oap_icon.py" "$OUT/OpenAmigaPrint.info"
+file "$OUT/OpenAmigaPrint.info"
+wc -c "$OUT/OpenAmigaPrint.info"
