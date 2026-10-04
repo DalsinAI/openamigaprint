@@ -4,7 +4,7 @@ the same as an LhA archive.
 
     python3 tools/make_package.py [--version 0.3] [--lha-module DIR] [--out build/package]
 
-Dale, 4 October 2026: "it needs an amiga installer, or something like it".
+We, 4 October 2026: "it needs an amiga installer, or something like it".
 The drawer holds the Installer script (package/Install-OpenPrint) with its
 icon, the ReadMe, and what the script installs, laid out as it goes:
   C/          the five commands
@@ -352,7 +352,7 @@ def build(version: str, out: Path) -> tuple[Path, list[tuple[str, bytes]]]:
 
 
 # ---------------------------------------------------------------- OS 3.2-style icons
-# Dale, 4 October 2026: "always make OS 3.2.3 style icons". Each classic icon
+# We, 4 October 2026: "always make OS 3.2.3 style icons". Each classic icon
 # above keeps its type, default tool, tool types, stack and drawer window; its
 # picture becomes an OS 3.5 colour icon with the classic one as fallback,
 # written by ACBuild's amiga-icon.js (node). Drawers use Boxie's OS 3.2 drawer

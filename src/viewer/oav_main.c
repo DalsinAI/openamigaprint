@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* OpenView: open, look, print. GadTools owns the window (Dale, 4 October
+/* OpenView: open, look, print. GadTools owns the window (We, 4 October
  * 2026: OS 3.x applications use GadTools or MUI, not ReAction);
  * datatypes.library owns what is shown in it.
  *   - Page setup is three labelled choices beside the picture; they apply to

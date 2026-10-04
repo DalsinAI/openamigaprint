@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* OpenPrint's Print requester, in GadTools (Dale, 4 October 2026: OS
+/* OpenPrint's Print requester, in GadTools (We, 4 October 2026: OS
  * 3.x applications use GadTools or MUI, not ReAction). It keeps the
  * contract of src/amiga/ui.c, oap_run_print_dialog(), and the 3 October
  * review's design:

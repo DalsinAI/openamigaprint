@@ -4,7 +4,7 @@
 /* What OpenPrint's GadTools windows share: the screen, its font (or
  * Topaz 8 when a window would not fit), a fixed-width font for lists with
  * columns, and the drawing GadTools leaves to the program: titled groups,
- * a progress bar and plain text. Dale, 4 October 2026: OS 3.x applications
+ * a progress bar and plain text. We, 4 October 2026: OS 3.x applications
  * use GadTools (or MUI), not ReAction. */
 #include <exec/types.h>
 #include <intuition/intuition.h>
