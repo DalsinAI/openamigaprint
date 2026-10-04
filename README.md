@@ -69,6 +69,16 @@ Classic AmigaOS 3.x:
 ```sh
 ./build-amiga.sh
 ```
+## Installing with the Amiga Installer
+
+Build the programs (`./build-amiga.sh`, `./build-browser.sh`, `./build-viewer.sh`), then the package:
+
+```sh
+python3 tools/make_package.py --lha-module ~/AmigaChrome/scripts
+```
+
+`build/package/OpenAmigaPrint` is a drawer to copy to the Amiga; `build/package/OpenAmigaPrint.lha` is the same as one archive (`--lha-module` names the folder with AmigaChrome's `lha_archive.py`; without it only the drawer is made). On the Amiga, double-click **Install OpenAmigaPrint** (it runs SYS:System/Installer on OS 3.2, C:Installer elsewhere). It installs the five commands in C:, `oapspool.device` in DEVS:, the printer driver in DEVS:Printers, the spooler in WBStartup if you want it, and an OpenAmigaPrint drawer (SYS:Utilities by default) with OpenAmigaView, Printers and Queue, a test picture and a test page. The script is `package/Install-OpenAmigaPrint`.
+
 ## First-light Amiga installation
 
 Copy:
