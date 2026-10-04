@@ -1,0 +1,130 @@
+; $VER: Install-OpenPrint @VERSION@ (@DATE@)
+; The Installer script for OpenPrint (C:Installer / SYS:System/Installer).
+; Run it from its icon in the OpenPrint package drawer.
+
+(set #version "@VERSION@")
+(set @app-name "OpenPrint")
+
+(if (< (/ (getversion) 65536) 39)
+    (abort "OpenPrint needs AmigaOS 3.0 or later."))
+
+(welcome
+    (cat "This installs OpenPrint " #version ".\n\n"
+         "OpenPrint prints from this Amiga to printers on your network that "
+         "take PDF (IPP), and saves documents as PDF files. OpenView opens "
+         "pictures and documents and hands them to it."))
+
+(message
+    (cat "OpenPrint will put:\n\n"
+         "OpenPrint, OAPPrinters, OAPDiscover, OpenView and OAVWorker in C:\n"
+         "oapspool.device in DEVS:\n"
+         "the OpenPrint printer driver in DEVS:Printers\n"
+         "the spooler in WBStartup, if you want it\n"
+         "and an OpenPrint drawer with OpenView, Printers and Queue, "
+         "a test picture and a test page.\n\n"
+         "Files with the same names are replaced."))
+
+(copyfiles
+    (prompt "Copying the OpenPrint commands to C:")
+    (help @copyfiles-help)
+    (source "C")
+    (dest "C:")
+    (all)
+    (optional "force"))
+
+(copylib
+    (prompt "Copying oapspool.device to DEVS:")
+    (help @copylib-help)
+    (source "Devs/oapspool.device")
+    (dest "DEVS:")
+    (confirm))
+
+(copyfiles
+    (prompt "Copying the OpenPrint printer driver to DEVS:Printers")
+    (help @copyfiles-help)
+    (source "Devs/Printers/OpenPrint")
+    (dest "DEVS:Printers")
+    (infos)
+    (optional "force"))
+
+(if (askbool
+        (prompt "Start the OpenPrint spooler each time Workbench starts?\n\n"
+                "It collects what programs print through printer.device and puts it "
+                "in the queue for the Print window.")
+        (help "Without the spooler, programs that print through printer.device "
+              "with OpenPrint chosen in Prefs/Printer have nothing to collect "
+              "their pages. OpenView and the Print window work either way.")
+        (default 1))
+    (copyfiles
+        (prompt "Copying the spooler to SYS:WBStartup")
+        (help @copyfiles-help)
+        (source "WBStartup/OAPSpooler")
+        (dest "SYS:WBStartup")
+        (infos)
+        (optional "force")))
+
+(set #where
+    (askdir
+        (prompt "Where should the OpenPrint drawer go?\n"
+                "(OpenView, Printers and Queue, and the test files)")
+        (help @askdir-help)
+        (default "SYS:Utilities")))
+(set #drawer (tackon #where "OpenPrint"))
+(makedir #drawer
+    (prompt "Making the drawer " #drawer)
+    (help @makedir-help))
+(copyfiles
+    (prompt "Copying the drawer's icon")
+    (help @copyfiles-help)
+    (source "Icons/OpenPrint.info")
+    (dest #where)
+    (optional "force"))
+(copyfiles
+    (prompt "Copying OpenView, Printers and Queue and the test files")
+    (help @copyfiles-help)
+    (source "Drawer")
+    (dest #drawer)
+    (all)
+    (optional "force"))
+(set @default-dest #drawer)
+
+; Before 4 October 2026 OpenPrint was OpenAmigaPrint, and OpenView was
+; OpenAmigaView. Their old files go to SYS:Storage/OpenPrint-Superseded, not
+; away; the settings in ENV:OpenAmigaPrint are still read.
+(set #old 0)
+(if (exists "C:OpenAmigaPrint") (set #old 1))
+(if (exists "C:OpenAmigaView") (set #old 1))
+(if (exists "DEVS:Printers/OpenAmigaPrint") (set #old 1))
+(if (exists (tackon #where "OpenAmigaPrint")) (set #old 1))
+(if #old
+    (
+        (set #store "SYS:Storage/OpenPrint-Superseded")
+        (if (not (exists #store)) (makedir #store (prompt "Making " #store) (help @makedir-help)))
+        (if (exists "C:OpenAmigaPrint")
+            (rename "C:OpenAmigaPrint" (tackon #store "OpenAmigaPrint")))
+        (if (exists "C:OpenAmigaView")
+            (rename "C:OpenAmigaView" (tackon #store "OpenAmigaView")))
+        (if (exists "DEVS:Printers/OpenAmigaPrint")
+            (rename "DEVS:Printers/OpenAmigaPrint" (tackon #store "OpenAmigaPrint.driver")))
+        (if (exists "DEVS:Printers/OpenAmigaPrint.info")
+            (rename "DEVS:Printers/OpenAmigaPrint.info" (tackon #store "OpenAmigaPrint.driver.info")))
+        (if (exists (tackon #where "OpenAmigaPrint"))
+            (rename (tackon #where "OpenAmigaPrint") (tackon #store "OpenAmigaPrint-drawer")))
+        (if (exists (tackon #where "OpenAmigaPrint.info"))
+            (rename (tackon #where "OpenAmigaPrint.info") (tackon #store "OpenAmigaPrint-drawer.info")))
+    ))
+
+(exit
+    (cat "OpenPrint is installed.\n\n"
+         "To try it: open the OpenPrint drawer, double-click Picture.png, "
+         "and choose Print... in OpenView.\n\n"
+         "Printers and Queue finds the printers on your network; choose one and "
+         "click Use for printing.\n\n"
+         "To print from any program: in Prefs/Printer choose the printer type "
+         "OpenPrint, the port \"device\" and oapspool.device unit 0. "
+         "The spooler starts with Workbench next time."
+         (if #old
+             (cat "\n\nOpenPrint was called OpenAmigaPrint. Its old files are in "
+                  "SYS:Storage/OpenPrint-Superseded; if Prefs/Printer named "
+                  "OpenAmigaPrint, choose OpenPrint there now.")
+             "")))

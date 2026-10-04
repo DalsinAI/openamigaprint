@@ -1,17 +1,18 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #ifndef OAP_PRINTERS_H
 #define OAP_PRINTERS_H
-/* The printers OpenAmigaPrint knows, shared by the Print requester and the
+/* The printers OpenPrint knows, shared by the Print requester and the
  * Printers and Queue window. Each is kept by name with what was verified
  * about it; the address is a detail, not how people choose a printer.
- * Stored as one line per printer in ENV:/ENVARC:OpenAmigaPrint/Printers:
+ * Stored as one line per printer in ENV:/ENVARC:OpenPrint/Printers:
  *   uri <TAB> pdf <TAB> name <TAB> note
  * "Save as PDF file" is always the first entry and is never stored. */
 #include <stddef.h>
 #include "oap_selection.h"
 
 #define OAP_PRINTERS_MAX 24
-#define OAP_PRINTERS_VAR "OpenAmigaPrint/Printers"
+#define OAP_PRINTERS_VAR "OpenPrint/Printers"
+#define OAP_PRINTERS_VAR_OLD "OpenAmigaPrint/Printers"   /* before 4 Oct 2026; read when the new one is empty */
 #define OAP_PRINTER_NAME_MAX 96
 #define OAP_PRINTER_NOTE_MAX 160
 #define OAP_SAVE_AS_PDF "file:"

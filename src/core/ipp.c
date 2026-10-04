@@ -38,7 +38,7 @@ int oap_ipp_build_prefix(const OAPJobOptions *o,unsigned char *b,size_t c,size_t
     if(!attr_s(b,c,&p,0x47,"attributes-charset","utf-8"))return 0;
     if(!attr_s(b,c,&p,0x48,"attributes-natural-language","en"))return 0;
     if(!attr_s(b,c,&p,0x45,"printer-uri",o->printer_uri))return 0;
-    if(!attr_s(b,c,&p,0x42,"requesting-user-name","OpenAmigaPrint"))return 0;
+    if(!attr_s(b,c,&p,0x42,"requesting-user-name","OpenPrint"))return 0;
     if(!attr_s(b,c,&p,0x42,"job-name",o->job_name))return 0;
     if(!attr_s(b,c,&p,0x49,"document-format","application/pdf"))return 0;
     if(!put8(b,c,&p,0x02))return 0;

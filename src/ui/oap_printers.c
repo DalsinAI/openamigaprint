@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* The printers OpenAmigaPrint knows (include/oap_printers.h). */
+/* The printers OpenPrint knows (include/oap_printers.h). */
 #include "oap_printers.h"
 #include "oap_discovery.h"
 #include <exec/types.h>
@@ -94,6 +94,8 @@ void oap_printers_load(OAPPrinterList *list)
     oap_printers_put(list, OAP_SAVE_AS_PDF, "Save as PDF file", OAP_PDF_YES, "Saves the document as a PDF on this Amiga");
 
     got = GetVar((STRPTR)OAP_PRINTERS_VAR, (STRPTR)buffer, sizeof(buffer), GVF_GLOBAL_ONLY | GVF_BINARY_VAR);
+    if (got <= 0)                              /* saved before the rename: OpenAmigaPrint/Printers */
+        got = GetVar((STRPTR)OAP_PRINTERS_VAR_OLD, (STRPTR)buffer, sizeof(buffer), GVF_GLOBAL_ONLY | GVF_BINARY_VAR);
     if (got > 0) {
         buffer[got < (LONG)sizeof(buffer) ? got : (LONG)sizeof(buffer) - 1] = 0;
         for (line = buffer; line && *line; line = next) {
@@ -109,7 +111,9 @@ void oap_printers_load(OAPPrinterList *list)
                 oap_printers_put(list, uri, name, pdf[0] - '0', note);
         }
     }
-    got = GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY);
+    got = GetVar((STRPTR)"OpenPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY);
+    if (got <= 0)                              /* saved before the rename */
+        got = GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY);
     if (got > 6 && !strncmp(def, "ipp://", 6) && oap_printers_find(list, def) < 0)
         oap_printers_put(list, def, NULL, OAP_PDF_YES, "Your default printer");
 }
