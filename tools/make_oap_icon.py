@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
-"""Generate the classic Workbench icon for DEVS:Printers/OpenAmigaPrint."""
+"""Generate the classic Workbench icon for DEVS:Printers/OpenPrint."""
 from __future__ import annotations
 
 import argparse
@@ -154,13 +154,13 @@ def build_icon() -> bytes:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("output", nargs="?", default="build/amigaos3/OpenAmigaPrint.info")
+    parser.add_argument("output", nargs="?", default="build/amigaos3/OpenPrint.info")
     args = parser.parse_args()
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     raw = build_icon()
     out.write_bytes(raw)
-    print(f"OpenAmigaPrint Workbench icon: {out} ({len(raw)} bytes)")
+    print(f"OpenPrint Workbench icon: {out} ({len(raw)} bytes)")
     return 0
 
 

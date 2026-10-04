@@ -1,6 +1,8 @@
-# OpenAmigaPrint
+# OpenPrint
 
-OpenAmigaPrint is a standalone, freely distributable modern printing stack for classic Amiga systems.
+OpenPrint is a standalone, freely distributable modern printing stack for classic Amiga systems.
+
+OpenPrint and its viewer OpenView were called OpenAmigaPrint and OpenAmigaView until 4 October 2026: products drop "Amiga", the repository (`DalsinAI/openamigaprint`) keeps it. The Installer moves the old programs to `SYS:Storage/OpenPrint-Superseded`, and settings saved under the old name are still read. `openprint.readme` is the Aminet readme.
 
 Its design goal is deliberately conventional on the Amiga side:
 
@@ -9,13 +11,13 @@ application
     |
    PRT: / printer.device
     |
-DEVS:Printers/OpenAmigaPrint
+DEVS:Printers/OpenPrint
     |  streaming PDF 1.4
     v
 DEVS:oapspool.device
     |  T: spool, document boundary at %%EOF
     v
-C:OpenAmigaPrint
+C:OpenPrint
     |
     +-- Save PDF
     +-- native Amiga print window
@@ -77,31 +79,31 @@ Build the programs (`./build-amiga.sh`, `./build-browser.sh`, `./build-viewer.sh
 python3 tools/make_package.py --lha-module ~/AmigaChrome/scripts
 ```
 
-`build/package/OpenAmigaPrint` is a drawer to copy to the Amiga; `build/package/OpenAmigaPrint.lha` is the same as one archive (`--lha-module` names the folder with AmigaChrome's `lha_archive.py`; without it only the drawer is made). On the Amiga, double-click **Install OpenAmigaPrint** (it runs SYS:System/Installer on OS 3.2, C:Installer elsewhere). It installs the five commands in C:, `oapspool.device` in DEVS:, the printer driver in DEVS:Printers, the spooler in WBStartup if you want it, and an OpenAmigaPrint drawer (SYS:Utilities by default) with OpenAmigaView, Printers and Queue, a test picture and a test page. The script is `package/Install-OpenAmigaPrint`.
+`build/package/OpenPrint` is a drawer to copy to the Amiga; `build/package/OpenPrint.lha` is the same as one archive (`--lha-module` names the folder with AmigaChrome's `lha_archive.py`; without it only the drawer is made). On the Amiga, double-click **Install OpenPrint** (it runs SYS:System/Installer on OS 3.2, C:Installer elsewhere). It installs the five commands in C:, `oapspool.device` in DEVS:, the printer driver in DEVS:Printers, the spooler in WBStartup if you want it, and an OpenPrint drawer (SYS:Utilities by default) with OpenView, Printers and Queue, a test picture and a test page. The script is `package/Install-OpenPrint`.
 
 ## First-light Amiga installation
 
 Copy:
 
 ```
-C/OpenAmigaPrint          -> C:OpenAmigaPrint
+C/OpenPrint          -> C:OpenPrint
 C/OAPPrintTest            -> C:OAPPrintTest
 C/OAPSpoolTest            -> C:OAPSpoolTest
 C/OAPStatusTest           -> C:OAPStatusTest
 Devs/oapspool.device      -> DEVS:oapspool.device
-Devs/Printers/OpenAmigaPrint -> DEVS:Printers/OpenAmigaPrint
-OpenAmigaPrint.info         -> DEVS:Printers/OpenAmigaPrint.info
+Devs/Printers/OpenPrint -> DEVS:Printers/OpenPrint
+OpenPrint.info         -> DEVS:Printers/OpenPrint.info
 ```
 
 In **Printer Preferences** select:
 
-- Printer Type: `OpenAmigaPrint`
+- Printer Type: `OpenPrint`
 - Printer Port: device
 - Device Unit: `oapspool.device`, unit 0
 
 Run `OAPStatusTest` first to verify the virtual port reports ready with paper-out and busy permanently clear. Then `OAPPrintTest` exercises the ordinary `printer.device` path. See `HOW_TO_TEST_FIRST_LIGHT.md` for the complete acceptance test.
 
-The generated PDF is spooled under `T:OpenAmigaPrint-job-XXXX.pdf`; once `%%EOF` is received, `oapspool.device` launches `C:OpenAmigaPrint` asynchronously.
+The generated PDF is spooled under `T:OpenPrint-job-XXXX.pdf`; once `%%EOF` is received, `oapspool.device` launches `C:OpenPrint` asynchronously.
 ## Network model
 
 The current first-light client accepts a manual URI such as:
@@ -116,19 +118,19 @@ Plain IPP is first light. IPPS will be added behind a TLS abstraction rather tha
 
 ## Licence
 
-OpenAmigaPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. Dale, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
+OpenPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. Dale, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
 
-The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenAmigaPrint by Dalsin Limited.
+The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenPrint by Dalsin Limited.
 
 The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
 
 ## Queue and graphics printing
 
-OpenAmigaPrint now treats completed printer jobs as durable queue entries rather than transient one-shot files.
+OpenPrint now treats completed printer jobs as durable queue entries rather than transient one-shot files.
 
 - Install `OAPSpooler` as a Workbench-startup tool (`SYS:WBStartup/OAPSpooler`) with `DONOTWAIT`.
-- The spooler stores completed jobs under `SYS:Spool/OpenAmigaPrint/` as a PDF spool artifact plus a `.job` metadata record.
-- Install `OpenAmigaPrint` plus `OpenAmigaPrintTool.info` as `SYS:Tools/OpenAmigaPrint` and `SYS:Tools/OpenAmigaPrint.info`. Double-click it, or run `OpenAmigaPrint` with no arguments (or `OpenAmigaPrint QUEUE`), to open the native queue window.
+- The spooler stores completed jobs under `SYS:Spool/OpenPrint/` as a PDF spool artifact plus a `.job` metadata record.
+- Install `OpenPrint` plus `OpenPrintTool.info` as `SYS:Tools/OpenPrint` and `SYS:Tools/OpenPrint.info`. Double-click it, or run `OpenPrint` with no arguments (or `OpenPrint QUEUE`), to open the native queue window.
 - Selecting **Open** on a queued job opens the native per-job window, where the job can be saved/exported or sent to an IPP printer.
 - `OAPImageTest` exercises the real `PRD_DUMPRPORT` graphics path. By default it prints a full-width, aspect-correct, centered colour test card; pass `1TO1` for a diagnostic unscaled dump.
 

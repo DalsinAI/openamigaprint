@@ -66,7 +66,7 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
     if (fd < 0) { snprintf(status, cap, "Printer connection failed"); goto done; }
     hn = snprintf(s->header, sizeof(s->header),
         "POST %s HTTP/1.1\r\nHost: %s:%u\r\nContent-Type: application/ipp\r\n"
-        "Content-Length: %lu\r\nConnection: close\r\nUser-Agent: OpenAmigaPrint/0.2\r\n\r\n",
+        "Content-Length: %lu\r\nConnection: close\r\nUser-Agent: OpenPrint/0.2\r\n\r\n",
         s->uri.path, s->uri.host, (unsigned)s->uri.port, (unsigned long)(plen + flen));
     if (hn < 0 || hn >= (long)sizeof(s->header)) {
         snprintf(status, cap, "IPP request header too large"); goto done;
