@@ -20,6 +20,7 @@ it only the drawer is made.
 from __future__ import annotations
 
 import argparse
+import os
 import math
 import shutil
 import struct
@@ -346,7 +347,49 @@ def build(version: str, out: Path) -> tuple[Path, list[tuple[str, bytes]]]:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
     (out / "OpenPrint.info").write_bytes(icon(WBDRAWER, "drawer", window=(420, 160)))
+    files = os32_icons(top, out, files)
     return top, files
+
+
+# ---------------------------------------------------------------- OS 3.2-style icons
+# Dale, 4 October 2026: "always make OS 3.2.3 style icons". Each classic icon
+# above keeps its type, default tool, tool types, stack and drawer window; its
+# picture becomes an OS 3.5 colour icon with the classic one as fallback,
+# written by ACBuild's amiga-icon.js (node). Drawers use Boxie's OS 3.2 drawer
+# (MIT, Damir Sijakovic; LICENCE.Boxie ships beside the icons).
+ACBUILD_ICON_JS = Path(os.environ.get("ACBUILD_ICON_JS", Path.home() / "AmigaChrome/launcher/acbuild-tools/amiga-icon.js"))
+BOXIE = Path(os.environ.get("BOXIE_ICONS", Path.home() / "AmigaChrome/resources/icons/collections/boxie"))
+ART_FOR = {"Install OpenPrint.info": "install", "ReadMe.info": "page", "WBStartup/OAPSpooler.info": "printer",
+           "Drawer/OpenView.info": "viewer", "Drawer/Printers and Queue.info": "printer",
+           "Drawer/Picture.png.info": "picture", "Drawer/TestPage.pdf.info": "pdf"}
+DRAWERS = ["Icons/OpenPrint.info"]
+
+
+def os32_icons(top: Path, out: Path, files: list[tuple[str, bytes]]) -> list[tuple[str, bytes]]:
+    import json, subprocess, tempfile
+    drawer = BOXIE / "os3" / "containers" / "drawer-blue.info"
+    if not ACBUILD_ICON_JS.is_file() or not drawer.is_file() or not shutil.which("node"):
+        raise SystemExit("OS 3.2-style icons need node, ACBuild's amiga-icon.js (ACBUILD_ICON_JS) and the Boxie set (BOXIE_ICONS)")
+    sys.path.insert(0, str(ROOT / "tools"))
+    import icon_art
+    with tempfile.TemporaryDirectory() as tmp:
+        jobs = []
+        for rel, art in ART_FOR.items():
+            rgba = Path(tmp) / f"{art}.rgba"
+            if not rgba.exists():
+                rgba.write_bytes(icon_art.draw(art))
+            jobs.append({"info": str(top / rel), "rgba": str(rgba), "w": icon_art.W, "h": icon_art.H})
+        for rel in DRAWERS:
+            jobs.append({"info": str(top / rel), "from": str(drawer)})
+        jobs.append({"info": str(out / "OpenPrint.info"), "from": str(drawer)})
+        (Path(tmp) / "jobs.json").write_text(json.dumps(jobs))
+        subprocess.run(["node", str(ROOT / "tools" / "os32_icons.js"), str(ACBUILD_ICON_JS), str(Path(tmp) / "jobs.json")],
+                       check=True, stdout=subprocess.DEVNULL)
+    (top / "Icons" / "LICENCE.Boxie").write_bytes((BOXIE / "LICENCE").read_bytes())
+    upgraded = set(ART_FOR) | set(DRAWERS)
+    files = [(rel, (top / rel).read_bytes() if rel in upgraded else data) for rel, data in files]
+    files.append(("Icons/LICENCE.Boxie", (top / "Icons" / "LICENCE.Boxie").read_bytes()))
+    return files
 
 
 def main() -> int:
