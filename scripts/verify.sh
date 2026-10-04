@@ -20,6 +20,8 @@ for f in OpenAmigaPrint oapspool.device oapspooltest oapstatustest oapprinttest 
     test -s "$B/$f"
     file "$B/$f" | grep -q 'AmigaOS loadseg'
 done
+test -s "$B/OpenAmigaPrint.info"
+file "$B/OpenAmigaPrint.info" | grep -q 'Amiga Workbench project icon'
 
 "$NM" -n "$B/OpenAmigaPrint.driver" | grep -q '^00000000 T _oap_printer_tag$'
 "$NM" -n "$B/OpenAmigaPrint.driver" | grep -q '^00000008 T _oap_ped$'
@@ -34,4 +36,4 @@ fi
 
 echo "OpenAmigaPrint verification: PASS"
 sha256sum "$B/OpenAmigaPrint" "$B/oapspool.device" "$B/oapspooltest" \
-  "$B/oapstatustest" "$B/oapprinttest" "$B/OpenAmigaPrint.driver"
+  "$B/oapstatustest" "$B/oapprinttest" "$B/OpenAmigaPrint.driver" "$B/OpenAmigaPrint.info"
