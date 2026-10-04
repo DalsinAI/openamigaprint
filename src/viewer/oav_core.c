@@ -82,7 +82,7 @@ int oav_pdf_rgb(FILE *f,unsigned long w,unsigned long h,const OAVLayout *s,
     clen=snprintf(content,sizeof(content),"q\n%s %s %s %s re W n\n%s 0 0 %s %s %s cm\n/Im0 Do\nQ\n",
         numbers[0],numbers[1],numbers[2],numbers[3],numbers[4],numbers[5],numbers[6],numbers[7]);
     if(clen<0||(size_t)clen>=sizeof(content)){free(row);fail(err,cap,"Page command overflow");return 0;}
-    fputs("%PDF-1.4\n% OpenAmigaView RGB export\n",f);
+    fputs("%PDF-1.4\n% OpenView RGB export\n",f);
     off[1]=ftell(f);fputs("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",f);
     off[2]=ftell(f);fputs("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",f);
     off[3]=ftell(f);fprintf(f,"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %s %s] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n",numbers[8],numbers[9]);

@@ -5,6 +5,6 @@
  * programs link has no stack swapping, so `__stack` alone does nothing: a
  * program started with Run from a boot-time shell gets 4 KB, which the
  * ReAction windows and path buffers overrun (the overrun corrupted the heap
- * and hung OpenAmigaView in malloc). Workbench start-ups pass through. */
+ * and hung OpenView in malloc). Workbench start-ups pass through. */
 int oap_main_with_stack(int (*body)(int, char **), int argc, char **argv, unsigned long bytes);
 #endif

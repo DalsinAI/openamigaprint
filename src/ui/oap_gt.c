@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* OpenAmigaPrint's GadTools helpers (include/oap_gt.h). */
+/* OpenPrint's GadTools helpers (include/oap_gt.h). */
 #include "oap_gt.h"
 #include <exec/libraries.h>
 #include <graphics/gfxbase.h>

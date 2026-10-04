@@ -1,9 +1,9 @@
-OpenAmigaPrint native mDNS follow-up, 3 October 2026
+OpenPrint native mDNS follow-up, 3 October 2026
 
 Original guest scan: 0 endpoints. Original ACNet mDNS route: errno 51.
 HostSocket scoped mDNS patch: 9 tests pass including 3 live printer responses.
 Canonical ACNet HostSocket suite: 22 tests pass.
-OpenAmigaPrint core suite: passes. Discovery codec suite: 942 checks pass.
+OpenPrint core suite: passes. Discovery codec suite: 942 checks pass.
 Injected denied send: exit 20 and completed Discovery send failed result.
 
 Observed native ReAction window:

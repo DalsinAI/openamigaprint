@@ -7,6 +7,6 @@ int main(void)
 {
     struct MsgPort *p;
     Forbid();p=FindPort((STRPTR)OAP_SPOOLER_PORT);Permit();
-    if(!p){puts("FAIL: OpenAmigaPrint spooler port is not present");return 20;}
-    puts("PASS: OpenAmigaPrint spooler port is present");return 0;
+    if(!p){puts("FAIL: OpenPrint spooler port is not present");return 20;}
+    puts("PASS: OpenPrint spooler port is present");return 0;
 }

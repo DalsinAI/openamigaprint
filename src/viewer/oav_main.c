@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* OpenAmigaView: open, look, print. GadTools owns the window (Dale, 4 October
+/* OpenView: open, look, print. GadTools owns the window (Dale, 4 October
  * 2026: OS 3.x applications use GadTools or MUI, not ReAction);
  * datatypes.library owns what is shown in it.
  *   - Page setup is three labelled choices beside the picture; they apply to
@@ -7,7 +7,7 @@
  *   - Print... hands over to the Print requester: a PDF as it is, a picture
  *     as a PDF the worker makes first (C:OAVWorker).
  *   - Animations and sounds bring their datatype's own player bar.
- *   - A file dropped on the window opens; the ARexx port OPENAMIGAVIEW takes
+ *   - A file dropped on the window opens; the ARexx port OPENVIEW takes
  *     the same commands as before. */
 #include "oav_core.h"
 #include "oav_jobs.h"
@@ -57,10 +57,10 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *UtilityBase, *DataTypesBase, *AslBase, *GadToolsBase, *WorkbenchBase;
 struct RxsLib *RexxSysBase;
-static const char oap_version[] __attribute__((used)) = "$VER: OpenAmigaView 0.3 (4.10.2026)";
+static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.3 (4.10.2026)";
 
 #define MAX_JOBS 128
-#define REXX_NAME "OPENAMIGAVIEW"
+#define REXX_NAME "OPENVIEW"
 
 enum {
     B_OPEN = 1, B_PAGE, B_FIT, B_ONE, B_MINUS, B_PLUS, B_PLAY, B_PAUSE, B_STOP, B_PREV, B_NEXT,
@@ -165,7 +165,7 @@ static void status(const char *s)
 
 static void set_title(const char *path)
 {
-    snprintf(A.title, sizeof(A.title), "OpenAmigaView: %.120s", FilePart((STRPTR)path));
+    snprintf(A.title, sizeof(A.title), "OpenView: %.120s", FilePart((STRPTR)path));
     if (A.win)
         SetWindowTitles(A.win, (UBYTE *)A.title, (UBYTE *)~0);
 }
@@ -620,7 +620,7 @@ static int print_dialog(void)
         return 0;
     }
     if (is_pdf(A.path)) {
-        status(run_program("OpenAmigaPrint", A.path) ? "The Print window is open" : "Couldn't open OpenAmigaPrint");
+        status(run_program("OpenPrint", A.path) ? "The Print window is open" : "Couldn't open OpenPrint");
         return 1;
     }
     if (A.group != GID_PICTURE) {
@@ -653,7 +653,7 @@ static void poll_jobs(void)
         if (A.print_after) {
             const char *pdf = strstr(msg, "Queued: ");
             A.print_after = 0;
-            if (pdf && run_program("OpenAmigaPrint", pdf + 8))
+            if (pdf && run_program("OpenPrint", pdf + 8))
                 copystr(msg, sizeof(msg), "The Print window is open for this page");
         }
         set_gadget(B_CANCEL, GA_Disabled, TRUE);
@@ -777,7 +777,7 @@ static int set_option(const char *key, const char *val)
     return 1;
 }
 
-/* ---- ARexx: the port OPENAMIGAVIEW ------------------------------------------- */
+/* ---- ARexx: the port OPENVIEW ------------------------------------------- */
 
 static const struct { const char *name; int id; int args; } rexx_commands[] = {
     { "SET", RX_SET, 2 }, { "VERSION", RX_VERSION, 0 }, { "HELP", RX_HELP, 0 }, { "OPEN", B_OPEN, 1 },
@@ -844,7 +844,7 @@ static int rexx_command(const char *line, const char **result)
         return 0;
     switch (rexx_commands[i].id) {
     case RX_VERSION:
-        snprintf(A.resultbuf, sizeof(A.resultbuf), "OpenAmigaView %s GadTools", OAV_VERSION);
+        snprintf(A.resultbuf, sizeof(A.resultbuf), "OpenView %s GadTools", OAV_VERSION);
         break;
     case RX_HELP:
         copystr(A.resultbuf, sizeof(A.resultbuf), "OPEN FILE | SET KEY VALUE | PRINT | SAVEPDF FILE | PLAY | PAUSE | STOP | NEXT | PREVIOUS | "
@@ -898,7 +898,7 @@ static void rexx_messages(void)
     }
 }
 
-/* One OPENAMIGAVIEW port at a time: a second viewer runs without one. */
+/* One OPENVIEW port at a time: a second viewer runs without one. */
 static void rexx_open(void)
 {
     struct MsgPort *port;
@@ -1191,7 +1191,7 @@ static int viewer_main(int argc, char **argv)
     A.page = 1;
     copystr(A.message, sizeof(A.message), "Open a picture or a PDF, or drop one on this window");
     if (!libraries()) {
-        fputs("OpenAmigaView: needs AmigaOS 3.0 or later (datatypes, GadTools)\n", stderr);
+        fputs("OpenView: needs AmigaOS 3.0 or later (datatypes, GadTools)\n", stderr);
         goto out;
     }
     if (!oap_gt_open(&A.g))
@@ -1210,7 +1210,7 @@ static int viewer_main(int argc, char **argv)
     if (A.menu)
         LayoutMenus(A.menu, A.g.vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
     A.win = OpenWindowTags(NULL,
-        WA_Title, (ULONG)"OpenAmigaView", WA_ScreenTitle, (ULONG)"OpenAmigaView: open, look, print",
+        WA_Title, (ULONG)"OpenView", WA_ScreenTitle, (ULONG)"OpenView: open, look, print",
         WA_PubScreen, (ULONG)A.g.screen, WA_InnerWidth, iw, WA_InnerHeight, ih,
         WA_Left, (A.g.screen->Width - iw) / 2, WA_Top, (A.g.screen->Height - ih) / 2,
         WA_Activate, TRUE, WA_DragBar, TRUE, WA_CloseGadget, TRUE, WA_DepthGadget, TRUE, WA_SizeGadget, TRUE,

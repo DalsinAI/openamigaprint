@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* OpenAmigaPrint's Print requester, in GadTools (Dale, 4 October 2026: OS
+/* OpenPrint's Print requester, in GadTools (Dale, 4 October 2026: OS
  * 3.x applications use GadTools or MUI, not ReAction). It keeps the
  * contract of src/amiga/ui.c, oap_run_print_dialog(), and the 3 October
  * review's design:
@@ -43,7 +43,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase, *AslBase;
 
-#define SETTINGS_VAR "OpenAmigaPrint/PrintSettings"
+#define SETTINGS_VAR "OpenPrint/PrintSettings"
 
 enum {
     G_PRINTER = 1, G_FIND, G_INFO, G_COPIES, G_LESS, G_MORE, G_PAGES, G_RANGE, G_PAPER, G_LAYOUT, G_SIDES, G_COLOUR,
@@ -140,7 +140,7 @@ static const char *job_title(const char *pdf)
     return base_name(pdf);
 }
 
-/* A page OpenAmigaView laid out says its paper and orientation in its .job
+/* A page OpenView laid out says its paper and orientation in its .job
  * (paper=0 A4 / 1 Letter, landscape=0/1): the Print requester starts there. */
 static void job_page_setup(const char *pdf, OAPJobOptions *o)
 {
@@ -605,7 +605,7 @@ static void find_printers(void)
             Close(in);
         if (out)
             Close(out);
-        show_status("Couldn't open Printers: install OAPPrinters beside OpenAmigaPrint or in C:");
+        show_status("Couldn't open Printers: install OAPPrinters beside OpenPrint or in C:");
         return;
     }
     show_status("Choose a printer in the Printers window and click Use for printing");
@@ -738,7 +738,8 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
     /* start on the printer the job asked for, else the default */
     copy(start, sizeof(start), o->printer_uri);
     if (!start[0] || strstr(start, "printer.local"))
-        GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)start, sizeof(start), GVF_GLOBAL_ONLY);
+        if (GetVar((STRPTR)"OpenPrint/PrinterURI", (STRPTR)start, sizeof(start), GVF_GLOBAL_ONLY) <= 0)
+            GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)start, sizeof(start), GVF_GLOBAL_ONLY);   /* saved before the rename */
     fill_printers(start);
     layout();
     if ((R.geo.inner_w + 24 > R.g.screen->Width || R.geo.inner_h + 40 > R.g.screen->Height) && oap_gt_fall_back(&R.g))
