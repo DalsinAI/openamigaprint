@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* OpenAmigaView: open, look, print. GadTools owns the window (Dale, 4 October
  * 2026: OS 3.x applications use GadTools or MUI, not ReAction);
  * datatypes.library owns what is shown in it.

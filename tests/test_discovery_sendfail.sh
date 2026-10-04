@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: BSD-2-Clause
+# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
 # Inject a denied mDNS send; no datagram reaches the LAN and no job is printed.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)

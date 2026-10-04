@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* OpenAmigaPrint's GadTools helpers (include/oap_gt.h). */
 #include "oap_gt.h"
 #include <exec/libraries.h>

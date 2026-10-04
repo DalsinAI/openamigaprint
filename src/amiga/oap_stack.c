@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* See include/oap_stack.h. */
 #include "oap_stack.h"
 #include <exec/types.h>

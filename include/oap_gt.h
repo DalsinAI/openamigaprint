@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #ifndef OAP_GT_H
 #define OAP_GT_H
 /* What OpenAmigaPrint's GadTools windows share: the screen, its font (or

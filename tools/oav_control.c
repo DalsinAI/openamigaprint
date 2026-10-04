@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* Test client for the public ARexx host. No document is executed as a script. */
 #include <exec/types.h>
 #include <exec/ports.h>
