@@ -45,8 +45,8 @@ The code is source-built independently of AmigaChrome.
 The following are intentionally not claimed by first light:
 
 - real PDF page rendering inside the preview pane;
-- IPP printer discovery with DNS-SD/mDNS;
-- Get-Printer-Attributes capability negotiation;
+- fully qualified native discovery on all target TCP/IP stacks;
+- capability negotiation beyond the PDF/accepting-jobs gate;
 - IPPS/TLS;
 - PWG Raster fallback for printers that do not accept PDF;
 - complete mapping of every classic text-style command;
@@ -118,3 +118,7 @@ OpenAmigaPrint now treats completed printer jobs as durable queue entries rather
 - `OAPImageTest` exercises the real `PRD_DUMPRPORT` graphics path. By default it prints a full-width, aspect-correct, centered colour test card; pass `1TO1` for a diagnostic unscaled dump.
 
 The classic printer-driver graphics path uses the canonical ExecBase pointer at absolute address 4, as required by traditional Amiga printer-driver init glue. Raster transfer honours `pi_xpos` and `pi_ScaleX`, so printer.device controls rotation, centering and scaling according to the active printer preferences.
+
+## ReAction PDF printer browser
+
+The `feature/pdf-printer-browser` integration adds `OAPPrinters`, an asynchronous DNS-SD discovery worker, explicit PDF capability checks, and Browse buttons in the print dialog and native viewer. Print-Job submission rechecks PDF support and validates a complete IPP response with a job identifier. See [PRINTER_BROWSER.md](docs/PRINTER_BROWSER.md) for installation, native validation status, and current protocol limits.

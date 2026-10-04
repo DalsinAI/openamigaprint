@@ -55,7 +55,7 @@ def build_icon():
     parts.append(struct.pack(">II",0,0))
     parts.append(struct.pack(">ii",NO_ICON_POSITION,NO_ICON_POSITION))
     parts.append(struct.pack(">II",0,0))
-    parts.append(struct.pack(">i",8192))
+    parts.append(struct.pack(">i",65536))
     parts.append(image_record(artwork(False))); parts.append(image_record(artwork(True)))
     raw=b"".join(parts)
     expected=78+2*(20+(WIDTH*HEIGHT*2//8))
