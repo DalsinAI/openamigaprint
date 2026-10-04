@@ -1,0 +1,19 @@
+OpenAmigaPrint native mDNS follow-up, 3 October 2026
+
+Original guest scan: 0 endpoints. Original ACNet mDNS route: errno 51.
+HostSocket scoped mDNS patch: 9 tests pass including 3 live printer responses.
+Canonical ACNet HostSocket suite: 22 tests pass.
+OpenAmigaPrint core suite: passes. Discovery codec suite: 942 checks pass.
+Injected denied send: exit 20 and completed Discovery send failed result.
+
+Observed native ReAction window:
+First scan: 4 endpoints, 1 verified PDF, 12 replies, 12 parsed.
+Show all in subsequent scan: 6 endpoints, 1 verified PDF, 14 replies, 14 parsed.
+Devices shown: HP ColorLaserJet MFP M282-M285, HP LaserJet MFP M232-M237,
+EPSON ET-15000 Series; each has IPP and IPPS advertisements.
+Colour HP plain IPP: PDF confirmed; ready; none.
+Other rows: unverified, either connection timeout or TLS unavailable.
+
+Temporary native startup failure was seen before the passing scans. That
+failure is not claimed fixed by the mDNS patch. No automated print was issued.
+A physical print completion has not been verified.
