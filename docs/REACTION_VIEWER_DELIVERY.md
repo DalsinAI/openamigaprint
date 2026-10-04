@@ -1,5 +1,9 @@
 # OpenAmigaView / OpenAmigaPrint delivery contract
 
+**4 October 2026: Dale changed the toolkit.** OS 3.x applications use GadTools or MUI, not ReAction, so
+OpenAmigaView, the Print requester and the Printers and Queue window are GadTools now; the rest of this
+contract stands.
+
 Dale's accepted scope, 3 October 2026: deliver all five application phases,
 with a native ReAction UI, a datatype-based universal viewer, good rendering,
 image-to-PDF/printing, a shared durable queue and ARexx automation. The working
@@ -8,7 +12,7 @@ remain usable without AmigaChrome or a Linux conversion service.
 
 ## Non-negotiable behaviour
 
-- ReAction, not the earlier GadTools shell. Use installed OS 3.2 classes first.
+- GadTools (4 October 2026; it read "ReAction, not the earlier GadTools shell" before). No third-party classes.
 - Open/view/play and print/export are separate capabilities. Opening the first
   frame of an animated GIF does not qualify as animated GIF playback.
 - PDF is an output/provider, not the universal internal representation. Source

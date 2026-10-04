@@ -8,7 +8,7 @@ python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenAmigaPrintTool.info"
 "$CC" -m68000 -fno-common -O2 -Wall -Wextra -Werror -Wno-pointer-sign -Wno-misleading-indentation -noixemul -I"$ROOT/include" \
   -o "$OUT/OpenAmigaPrint" \
   "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/core/pdf_demo.c" \
-  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/selection_events.c" "$ROOT/src/amiga/printer_preferences.c" "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/ui/oap_print_requester.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/amiga/main.c" "$ROOT/src/amiga/oap_stack.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" -lamiga
+  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/selection_events.c" "$ROOT/src/amiga/printer_preferences.c" "$ROOT/src/amiga/ipp_transport.c" "$ROOT/src/ui/oap_print_requester.c" "$ROOT/src/ui/oap_gt.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/amiga/main.c" "$ROOT/src/amiga/oap_stack.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" -lamiga
 file "$OUT/OpenAmigaPrint"
 wc -c "$OUT/OpenAmigaPrint"
 

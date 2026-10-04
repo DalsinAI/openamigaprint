@@ -6,7 +6,7 @@ OUT="$ROOT/build/amigaos3"
 mkdir -p "$OUT"
 FLAGS='-m68000 -fno-common -O2 -Wall -Wextra -Werror -Wno-pointer-sign -Wno-misleading-indentation -noixemul'
 "$CC" $FLAGS -I"$ROOT/include" -o "$OUT/OpenAmigaView" \
- "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/selection_events.c" "$ROOT/src/viewer/oav_main.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/amiga/oap_stack.c" -lamiga
+ "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/selection_events.c" "$ROOT/src/viewer/oav_main.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/ui/oap_gt.c" "$ROOT/src/amiga/oap_stack.c" -lamiga
 "$CC" $FLAGS -I"$ROOT/include" -o "$OUT/OAVWorker" \
  "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_worker.c" "$ROOT/src/amiga/oap_stack.c" \
  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/discovery/network.c" "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" "$ROOT/src/amiga/ipp_transport.c" -lamiga
