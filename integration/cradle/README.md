@@ -26,7 +26,7 @@ The optional live test sends one mDNS query only; it does not send a print job.
 On 3 October 2026, the original policy failure was reproduced as Amiga errno 51.
 The patched HostSocket received responses from all three LAN printers, and all
 nine policy/live tests passed. The canonical host suite passed 22 tests. The
-OpenAmigaPrint codec suite passed 942 checks, and the send-failure injection test
+OpenPrint codec suite passed 942 checks, and the send-failure injection test
 proved that a blocked query produces a completed error, not an empty success.
 
 An initial Instance-23 retest showed a C:ACClip software failure and a stall

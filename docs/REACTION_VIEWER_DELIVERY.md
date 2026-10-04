@@ -1,13 +1,13 @@
-# OpenAmigaView / OpenAmigaPrint delivery contract
+# OpenView / OpenPrint delivery contract
 
 **4 October 2026: Dale changed the toolkit.** OS 3.x applications use GadTools or MUI, not ReAction, so
-OpenAmigaView, the Print requester and the Printers and Queue window are GadTools now; the rest of this
+OpenView, the Print requester and the Printers and Queue window are GadTools now; the rest of this
 contract stands.
 
 Dale's accepted scope, 3 October 2026: deliver all five application phases,
 with a native ReAction UI, a datatype-based universal viewer, good rendering,
 image-to-PDF/printing, a shared durable queue and ARexx automation. The working
-name of the viewer is OpenAmigaView. This is not a browser application and must
+name of the viewer is OpenView. This is not a browser application and must
 remain usable without AmigaChrome or a Linux conversion service.
 
 ## Non-negotiable behaviour
@@ -59,7 +59,7 @@ An installed datatype is a dependency, not an automatic test pass.
 
 ## Architecture
 
-OpenAmigaView ReAction UI and ARexx -> shared commands -> immutable job request
+OpenView ReAction UI and ARexx -> shared commands -> immutable job request
 -> native worker -> provider -> page composition -> output backend -> OAP queue.
 DataType objects are hosted with AddDTObject/RemoveDTObject, not handed to
 layout.gadget as ordinary owned children. Input data and the printer service

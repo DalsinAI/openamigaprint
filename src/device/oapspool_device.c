@@ -24,8 +24,8 @@ struct OAPSpoolBase {
 struct ExecBase *SysBase;
 int start(void){return -1;}
 static const char dev_name[]="oapspool.device";
-static const char dev_id[]="oapspool.device 0.1 (3.10.2026) OpenAmigaPrint\r\n";
-static const char ver[] __attribute__((used))="$VER: oapspool.device 0.1 (3.10.2026) OpenAmigaPrint";
+static const char dev_id[]="oapspool.device 0.1 (3.10.2026) OpenPrint\r\n";
+static const char ver[] __attribute__((used))="$VER: oapspool.device 0.1 (3.10.2026) OpenPrint";
 
 static BPTR dev_expunge(REG(a6,struct OAPSpoolBase *b))
 {

@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #ifndef OAP_GT_H
 #define OAP_GT_H
-/* What OpenAmigaPrint's GadTools windows share: the screen, its font (or
+/* What OpenPrint's GadTools windows share: the screen, its font (or
  * Topaz 8 when a window would not fit), a fixed-width font for lists with
  * columns, and the drawing GadTools leaves to the program: titled groups,
  * a progress bar and plain text. Dale, 4 October 2026: OS 3.x applications

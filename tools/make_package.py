@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""OpenAmigaPrint as an Amiga package: a drawer to run Installer from, and
+"""OpenPrint as an Amiga package: a drawer to run Installer from, and
 the same as an LhA archive.
 
     python3 tools/make_package.py [--version 0.3] [--lha-module DIR] [--out build/package]
 
 Dale, 4 October 2026: "it needs an amiga installer, or something like it".
-The drawer holds the Installer script (package/Install-OpenAmigaPrint) with its
+The drawer holds the Installer script (package/Install-OpenPrint) with its
 icon, the ReadMe, and what the script installs, laid out as it goes:
   C/          the five commands
-  Devs/       oapspool.device, Printers/OpenAmigaPrint
+  Devs/       oapspool.device, Printers/OpenPrint
   WBStartup/  the spooler
-  Drawer/     OpenAmigaView, Printers and Queue, Picture.png, TestPage.pdf
+  Drawer/     OpenView, Printers and Queue, Picture.png, TestPage.pdf
 The programs come from build/amigaos3 (run build-amiga.sh, build-browser.sh
 and build-viewer.sh first). The icons are classic four-colour icons, made
 here, so the package looks the same on every Workbench from 2.04 on.
@@ -247,7 +247,7 @@ def test_png(w: int = 320, h: int = 200) -> bytes:
 
 def test_pdf(title: str) -> bytes:
     """One A4 page with a heading, in plain PDF 1.4."""
-    text = f"BT /F1 24 Tf 72 760 Td ({title}) Tj ET\nBT /F1 12 Tf 72 730 Td (If this is on paper, OpenAmigaPrint works.) Tj ET\n".encode()
+    text = f"BT /F1 24 Tf 72 760 Td ({title}) Tj ET\nBT /F1 12 Tf 72 730 Td (If this is on paper, OpenPrint works.) Tj ET\n".encode()
     objs = [b"<< /Type /Catalog /Pages 2 0 R >>",
             b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
@@ -266,35 +266,35 @@ def test_pdf(title: str) -> bytes:
     return bytes(out)
 
 
-README = """OpenAmigaPrint @VERSION@
+README = """OpenPrint @VERSION@
 ==================
 
-OpenAmigaPrint prints from your Amiga to printers on your network that take
+OpenPrint prints from your Amiga to printers on your network that take
 PDF (IPP: most office printers since about 2012), and saves documents as PDF
 files. It needs AmigaOS 3.0 or later and a TCP/IP stack (bsdsocket.library)
 to reach printers; saving PDF files needs neither.
 
 Installing
 ----------
-Double-click "Install OpenAmigaPrint". It puts:
-  C:              OpenAmigaPrint, OAPPrinters, OAPDiscover, OpenAmigaView,
+Double-click "Install OpenPrint". It puts:
+  C:              OpenPrint, OAPPrinters, OAPDiscover, OpenView,
                   OAVWorker
   DEVS:           oapspool.device
-  DEVS:Printers   the OpenAmigaPrint printer driver
+  DEVS:Printers   the OpenPrint printer driver
   SYS:WBStartup   the spooler (if you say yes)
-and a drawer "OpenAmigaPrint" (in SYS:Utilities unless you choose another
-place) with OpenAmigaView, Printers and Queue, Picture.png and TestPage.pdf.
+and a drawer "OpenPrint" (in SYS:Utilities unless you choose another
+place) with OpenView, Printers and Queue, Picture.png and TestPage.pdf.
 
 Trying it
 ---------
-1. Open the OpenAmigaPrint drawer and double-click "Printers and Queue". It
+1. Open the OpenPrint drawer and double-click "Printers and Queue". It
    searches your network; choose a printer marked Ready and click "Use for
    printing".
-2. Double-click Picture.png. OpenAmigaView shows it on the page; set Paper,
+2. Double-click Picture.png. OpenView shows it on the page; set Paper,
    Turn and Size, then choose Print... . The Print window opens on the page.
 3. Double-click TestPage.pdf for a PDF: Print... sends it as it is.
 4. Programs that print through printer.device: in Prefs/Printer choose the
-   printer type OpenAmigaPrint, the port "device" and oapspool.device unit 0.
+   printer type OpenPrint, the port "device" and oapspool.device unit 0.
    Their pages then come to the Print window.
 
 Nothing is sent to a printer until you click Print in the Print window. An
@@ -307,45 +307,45 @@ Licence: MIT, Copyright (c) 2026 Dalsin Limited (see the source repository).
 # ---------------------------------------------------------------- the package
 
 def build(version: str, out: Path) -> tuple[Path, list[tuple[str, bytes]]]:
-    need = ["OpenAmigaPrint", "OAPPrinters", "OAPDiscover", "OpenAmigaView", "OAVWorker", "OAPSpooler",
-            "oapspool.device", "OpenAmigaPrint.driver"]
+    need = ["OpenPrint", "OAPPrinters", "OAPDiscover", "OpenView", "OAVWorker", "OAPSpooler",
+            "oapspool.device", "OpenPrint.driver"]
     missing = [n for n in need if not (BUILD / n).is_file()]
     if missing:
         raise SystemExit(f"build these first (build-amiga.sh, build-browser.sh, build-viewer.sh): {', '.join(missing)}")
     files: list[tuple[str, bytes]] = []
     add = lambda rel, data: files.append((rel, data))
     date = time.strftime("%d.%m.%Y").lstrip("0").replace(".0", ".")
-    script = (ROOT / "package" / "Install-OpenAmigaPrint").read_text(encoding="latin-1")
-    add("Install OpenAmigaPrint", script.replace("@VERSION@", version).replace("@DATE@", date).encode("latin-1"))
-    add("Install OpenAmigaPrint.info", icon(WBPROJECT, "install", "Installer",
-                                            ["APPNAME=OpenAmigaPrint", "MINUSER=NOVICE", "DEFUSER=NOVICE", "LOGFILE=T:OpenAmigaPrint-install.log"]))
+    script = (ROOT / "package" / "Install-OpenPrint").read_text(encoding="latin-1")
+    add("Install OpenPrint", script.replace("@VERSION@", version).replace("@DATE@", date).encode("latin-1"))
+    add("Install OpenPrint.info", icon(WBPROJECT, "install", "Installer",
+                                            ["APPNAME=OpenPrint", "MINUSER=NOVICE", "DEFUSER=NOVICE", "LOGFILE=T:OpenPrint-install.log"]))
     add("ReadMe", README.replace("@VERSION@", version).encode("latin-1"))
     add("ReadMe.info", icon(WBPROJECT, "page", "SYS:Utilities/MultiView"))
-    for name in ("OpenAmigaPrint", "OAPPrinters", "OAPDiscover", "OpenAmigaView", "OAVWorker"):
+    for name in ("OpenPrint", "OAPPrinters", "OAPDiscover", "OpenView", "OAVWorker"):
         add(f"C/{name}", (BUILD / name).read_bytes())
     add("Devs/oapspool.device", (BUILD / "oapspool.device").read_bytes())
-    add("Devs/Printers/OpenAmigaPrint", (BUILD / "OpenAmigaPrint.driver").read_bytes())
+    add("Devs/Printers/OpenPrint", (BUILD / "OpenPrint.driver").read_bytes())
     add("WBStartup/OAPSpooler", (BUILD / "OAPSpooler").read_bytes())
     add("WBStartup/OAPSpooler.info", icon(WBTOOL, "printer", tool_types=["DONOTWAIT"], stack=8192))
     # the drawer the script installs: the two programs people open, and something to print
-    add("Icons/OpenAmigaPrint.info", icon(WBDRAWER, "drawer", window=(420, 150)))   # no icon of its own: Workbench hides it
-    add("Drawer/OpenAmigaView", (BUILD / "OpenAmigaView").read_bytes())
-    add("Drawer/OpenAmigaView.info", icon(WBTOOL, "viewer", stack=65536))
+    add("Icons/OpenPrint.info", icon(WBDRAWER, "drawer", window=(420, 150)))   # no icon of its own: Workbench hides it
+    add("Drawer/OpenView", (BUILD / "OpenView").read_bytes())
+    add("Drawer/OpenView.info", icon(WBTOOL, "viewer", stack=65536))
     add("Drawer/Printers and Queue", (BUILD / "OAPPrinters").read_bytes())
     add("Drawer/Printers and Queue.info", icon(WBTOOL, "printer", stack=65536))
     add("Drawer/Picture.png", test_png())
-    add("Drawer/Picture.png.info", icon(WBPROJECT, "picture", "C:OpenAmigaView", stack=65536))
-    add("Drawer/TestPage.pdf", test_pdf("OpenAmigaPrint test page"))
-    add("Drawer/TestPage.pdf.info", icon(WBPROJECT, "pdf", "C:OpenAmigaView", stack=65536))
+    add("Drawer/Picture.png.info", icon(WBPROJECT, "picture", "C:OpenView", stack=65536))
+    add("Drawer/TestPage.pdf", test_pdf("OpenPrint test page"))
+    add("Drawer/TestPage.pdf.info", icon(WBPROJECT, "pdf", "C:OpenView", stack=65536))
 
-    top = out / "OpenAmigaPrint"
+    top = out / "OpenPrint"
     if top.exists():
         shutil.rmtree(top)
     for rel, data in files:
         p = top / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
-    (out / "OpenAmigaPrint.info").write_bytes(icon(WBDRAWER, "drawer", window=(420, 160)))
+    (out / "OpenPrint.info").write_bytes(icon(WBDRAWER, "drawer", window=(420, 160)))
     return top, files
 
 
@@ -362,9 +362,9 @@ def main() -> int:
     if a.lha_module:
         sys.path.insert(0, a.lha_module)
         import lha_archive
-        members = [lha_archive.Member(f"OpenAmigaPrint/{rel}", data) for rel, data in files]
-        members.append(lha_archive.Member("OpenAmigaPrint.info", (out / "OpenAmigaPrint.info").read_bytes()))
-        archive = lha_archive.write(out / "OpenAmigaPrint.lha", members)
+        members = [lha_archive.Member(f"OpenPrint/{rel}", data) for rel, data in files]
+        members.append(lha_archive.Member("OpenPrint.info", (out / "OpenPrint.info").read_bytes()))
+        archive = lha_archive.write(out / "OpenPrint.lha", members)
         print(f"{archive} ({archive.stat().st_size} bytes)")
     return 0
 
