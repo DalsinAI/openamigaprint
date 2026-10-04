@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 static const char message[] =
-    "OpenAmigaPrint first-light\n"
+    "OpenPrint first-light\n"
     "Classic printer.device to PDF to native print UI.\n"
     "If you can read this in the generated PDF, text printing works.\n"
     "\f";
@@ -16,19 +16,19 @@ int main(void)
     int rc=20;
     p=CreateMsgPort();
     if(p)io=(struct IOStdReq *)CreateIORequest(p,sizeof(*io));
-    if(!p||!io){puts("OpenAmigaPrint: no memory");goto done;}
+    if(!p||!io){puts("OpenPrint: no memory");goto done;}
     if(OpenDevice((STRPTR)"printer.device",0,(struct IORequest *)io,0)){
-        puts("OpenAmigaPrint: cannot open printer.device");
+        puts("OpenPrint: cannot open printer.device");
         goto done;
     }
     io->io_Command=CMD_WRITE;
     io->io_Data=(APTR)message;
     io->io_Length=sizeof(message)-1;
     if(DoIO((struct IORequest *)io)){
-        printf("OpenAmigaPrint: printer.device error %ld\n",(long)io->io_Error);
+        printf("OpenPrint: printer.device error %ld\n",(long)io->io_Error);
         goto closeit;
     }
-    puts("OpenAmigaPrint: text job submitted");
+    puts("OpenPrint: text job submitted");
     rc=0;
 closeit:
     CloseDevice((struct IORequest *)io);

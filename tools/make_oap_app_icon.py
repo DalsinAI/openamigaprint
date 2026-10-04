@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the classic Workbench tool icon for the OpenAmigaPrint queue app."""
+"""Generate the classic Workbench tool icon for the OpenPrint queue app."""
 from __future__ import annotations
 import argparse, struct
 from pathlib import Path
@@ -64,8 +64,8 @@ def build_icon():
     return raw
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument("output",nargs="?",default="build/amigaos3/OpenAmigaPrintTool.info")
+    ap=argparse.ArgumentParser();ap.add_argument("output",nargs="?",default="build/amigaos3/OpenPrintTool.info")
     out=Path(ap.parse_args().output);out.parent.mkdir(parents=True,exist_ok=True);raw=build_icon();out.write_bytes(raw)
-    print(f"OpenAmigaPrint tool icon: {out} ({len(raw)} bytes)")
+    print(f"OpenPrint tool icon: {out} ({len(raw)} bytes)")
     return 0
 if __name__=="__main__": raise SystemExit(main())

@@ -22,7 +22,7 @@ struct PrinterData *PD;
 struct ExecBase *SysBase;
 extern struct PrinterExtendedData oap_ped;
 
-char oap_printer_name[] = "OpenAmigaPrint";
+char oap_printer_name[] = "OpenPrint";
 static UBYTE special_cmd[] = { 0xff, 0 };
 #define S (STRPTR)special_cmd
 STRPTR oap_commands[77] = {
@@ -100,7 +100,7 @@ static void reset_state(void)
 static void begin_doc(void)
 {
     if(g_doc_open)return;
-    pw("%PDF-1.4\n% OpenAmigaPrint\n");
+    pw("%PDF-1.4\n% OpenPrint\n");
     obj_start(1);pw("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
     obj_start(3);pw("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
     g_doc_open=1;

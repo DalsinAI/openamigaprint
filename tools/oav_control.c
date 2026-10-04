@@ -23,7 +23,7 @@ int main(int argc,char **argv)
   m=CreateRexxMsg(reply,(STRPTR)"rexx",(STRPTR)"OAVCONTROL");if(!m)goto done;
   m->rm_Action=RXCOMM|RXFF_RESULT;m->rm_Args[0]=CreateArgstring((STRPTR)line,strlen(line));if(!m->rm_Args[0])goto done;
   fprintf(log,"COMMAND %s\n",line);fflush(log);
-  Forbid();host=FindPort((STRPTR)"OPENAMIGAVIEW");if(host)PutMsg(host,(struct Message *)m);Permit();
+  Forbid();host=FindPort((STRPTR)"OPENVIEW");if(host)PutMsg(host,(struct Message *)m);Permit();
   if(!host){fputs("ERROR host not available\n",log);goto done;}
   WaitPort(reply);GetMsg(reply);
   fprintf(log,"RC %ld\n",(long)m->rm_Result1);

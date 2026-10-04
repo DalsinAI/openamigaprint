@@ -1,14 +1,14 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
-/* OpenAmigaPrint's Printers and Queue window (C:OAPPrinters), in GadTools
+/* OpenPrint's Printers and Queue window (C:OAPPrinters), in GadTools
  * (Dale, 4 October 2026: OS 3.x applications use GadTools or MUI, not
  * ReAction). It replaces the separate printer browser and queue window, as
  * the 3 October review set out:
  *   - printers by name, with their state and whether they take PDF; the
  *     address shows only for the printer selected;
  *   - discovery reports its progress and ends with a count or a reason;
- *   - printers found are remembered (ENV:OpenAmigaPrint/Printers), so the
+ *   - printers found are remembered (ENV:OpenPrint/Printers), so the
  *     Print requester offers them without a new search;
- *   - one queue for every job, from printer.device and OpenAmigaView alike;
+ *   - one queue for every job, from printer.device and OpenView alike;
  *   - menus with Amiga-key shortcuts, and a key on every button.
  * The lists use the system's fixed-width font so their columns line up.
  * Network work stays with C:OAPDiscover; only printers verified to take PDF
@@ -265,7 +265,8 @@ static void fill_printers(void)
 static void load_default(void)
 {
     P.default_uri[0] = 0;
-    GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)P.default_uri, sizeof(P.default_uri), GVF_GLOBAL_ONLY);
+    if (GetVar((STRPTR)"OpenPrint/PrinterURI", (STRPTR)P.default_uri, sizeof(P.default_uri), GVF_GLOBAL_ONLY) <= 0)
+        GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)P.default_uri, sizeof(P.default_uri), GVF_GLOBAL_ONLY);   /* saved before the rename */
 }
 
 static int safe_uri(const char *s)
@@ -363,7 +364,7 @@ static void use_printer(void)
         show_status("Only printers verified to take PDF can be used for printing");
         return;
     }
-    if (!oap_preferences_store("OpenAmigaPrint/PrinterURI", p->uri, error, sizeof(error))) {
+    if (!oap_preferences_store("OpenPrint/PrinterURI", p->uri, error, sizeof(error))) {
         show_status(error);
         return;
     }
@@ -381,14 +382,14 @@ static void test_page(void)
     char program[256], cmd[900];
     if (!p || p->pdf != OAP_PDF_YES)
         return;
-    if (!oap_pdf_write_demo("T:OpenAmigaPrint-TestPage.pdf", "OpenAmigaPrint test page")) {
+    if (!oap_pdf_write_demo("T:OpenPrint-TestPage.pdf", "OpenPrint test page")) {
         show_status("Couldn't write the test page to T:");
         return;
     }
-    oap_program_path("OpenAmigaPrint", program, sizeof(program));
-    snprintf(cmd, sizeof(cmd), "\"%s\" \"T:OpenAmigaPrint-TestPage.pdf\" \"%s\"", program, p->uri);
+    oap_program_path("OpenPrint", program, sizeof(program));
+    snprintf(cmd, sizeof(cmd), "\"%s\" \"T:OpenPrint-TestPage.pdf\" \"%s\"", program, p->uri);
     show_status(run_async(cmd) ? "The Print window shows the test page: check it, then click Print"
-                               : "Couldn't open OpenAmigaPrint for the test page");
+                               : "Couldn't open OpenPrint for the test page");
 }
 
 /* ---- the queue ---------------------------------------------------------- */
@@ -498,9 +499,9 @@ static void print_job(void)
     char program[256], cmd[600];
     if (!r)
         return;
-    oap_program_path("OpenAmigaPrint", program, sizeof(program));
+    oap_program_path("OpenPrint", program, sizeof(program));
     snprintf(cmd, sizeof(cmd), "\"%s\" \"%s\"", program, r->pdf);
-    show_status(run_async(cmd) ? "The Print window is open for that document" : "Couldn't open OpenAmigaPrint");
+    show_status(run_async(cmd) ? "The Print window is open for that document" : "Couldn't open OpenPrint");
 }
 
 /* Removing keeps the files: they move to the queue's Removed drawer. */
@@ -823,7 +824,7 @@ static int printers_main(int argc, char **argv)
     if (P.menu)
         LayoutMenus(P.menu, P.g.vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
     P.win = OpenWindowTags(NULL,
-        WA_Title, (ULONG)"OpenAmigaPrint: Printers and Queue", WA_PubScreen, (ULONG)P.g.screen,
+        WA_Title, (ULONG)"OpenPrint: Printers and Queue", WA_PubScreen, (ULONG)P.g.screen,
         WA_InnerWidth, P.nat_w, WA_InnerHeight, P.nat_h,
         WA_Left, (P.g.screen->Width - P.nat_w) / 2, WA_Top, (P.g.screen->Height - P.nat_h) / 2,
         WA_Activate, TRUE, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SizeGadget, TRUE,
