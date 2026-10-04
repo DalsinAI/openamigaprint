@@ -43,6 +43,7 @@
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
+static const char oap_version[] __attribute__((used)) = "$VER: OAPPrinters 0.3 (4.10.2026)";
 
 #define QUEUE_MAX 48
 #define ROW_MAX 200
