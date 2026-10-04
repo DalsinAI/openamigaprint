@@ -1,10 +1,10 @@
 # OpenView / OpenPrint delivery contract
 
-**4 October 2026: Dale changed the toolkit.** OS 3.x applications use GadTools or MUI, not ReAction, so
+**4 October 2026: We changed the toolkit.** OS 3.x applications use GadTools or MUI, not ReAction, so
 OpenView, the Print requester and the Printers and Queue window are GadTools now; the rest of this
 contract stands.
 
-Dale's accepted scope, 3 October 2026: deliver all five application phases,
+Our accepted scope, 3 October 2026: deliver all five application phases,
 with a native ReAction UI, a datatype-based universal viewer, good rendering,
 image-to-PDF/printing, a shared durable queue and ARexx automation. The working
 name of the viewer is OpenView. This is not a browser application and must

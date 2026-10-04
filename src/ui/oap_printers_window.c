@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* OpenPrint's Printers and Queue window (C:OAPPrinters), in GadTools
- * (Dale, 4 October 2026: OS 3.x applications use GadTools or MUI, not
+ * (We, 4 October 2026: OS 3.x applications use GadTools or MUI, not
  * ReAction). It replaces the separate printer browser and queue window, as
  * the 3 October review set out:
  *   - printers by name, with their state and whether they take PDF; the
