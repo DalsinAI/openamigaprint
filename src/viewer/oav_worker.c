@@ -123,7 +123,7 @@ commit:
  if(ok&&!strcmp(r.action,"queue")){
   size_t n;strncpy(meta,out,sizeof(meta)-1);meta[sizeof(meta)-1]=0;n=strlen(meta);strcpy(meta+n-4,".job");
   f=fopen(out,"rb");size=0;if(f){fseek(f,0,SEEK_END);size=ftell(f);fclose(f);f=NULL;}
-  f=fopen(meta,"w");if(f){fprintf(f,"state=queued\nbytes=%ld\npdf=%s\nsource=%s\nrequest=%s\ntitle=%s\n",size,out,snapshot,argv[1],FilePart((STRPTR)r.source));if(fclose(f)){ok=0;strcpy(msg,"PDF saved but queue metadata close failed");}f=NULL;}else{ok=0;strcpy(msg,"PDF saved but queue metadata could not be created");}
+  f=fopen(meta,"w");if(f){fprintf(f,"state=queued\nbytes=%ld\npdf=%s\nsource=%s\nrequest=%s\ntitle=%s\npaper=%d\nlandscape=%d\n",size,out,snapshot,argv[1],FilePart((STRPTR)r.source),r.layout.paper,r.layout.landscape);if(fclose(f)){ok=0;strcpy(msg,"PDF saved but queue metadata close failed");}f=NULL;}else{ok=0;strcpy(msg,"PDF saved but queue metadata could not be created");}
  }
  if(ok)snprintf(msg,sizeof(msg),"%s: %.210s",!strcmp(r.action,"queue")?"Queued":"Saved",out);
 done:

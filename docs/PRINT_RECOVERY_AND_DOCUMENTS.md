@@ -59,7 +59,7 @@ The next conversion work should use:
          -> durable queue -> explicitly selected destination
 
 Each backend must report View, Paginate, Export PDF and Print capabilities
-separately. ReAction enables only the supported actions and explains a missing
+separately. The viewer enables only the supported actions and explains a missing
 backend. Work occurs in a worker, with progress, cancellation and preserved
 input/output. Office backends must lay out text, fonts, images, tables and
 slides; animation/video export must explicitly select a frame or contact sheet.

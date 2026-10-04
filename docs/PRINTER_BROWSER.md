@@ -1,8 +1,8 @@
-# PDF printer browser - native ReAction delivery
+# PDF printer browser - native GadTools delivery
 
 ## What this change installs
 
-`C:OAPPrinters` is the native ReAction browser. `C:OAPDiscover` is its separate network worker. Both the existing OpenAmigaPrint per-job dialog and OpenAmigaView have a Browse button. The existing printer driver and spooler do not need replacement for this change.
+`C:OAPPrinters` is the Printers and Queue window, in GadTools (it was ReAction until 4 October 2026). `C:OAPDiscover` is its separate network worker. Both the existing OpenAmigaPrint per-job dialog and OpenAmigaView have a Browse button. The existing printer driver and spooler do not need replacement for this change.
 
 The browser discovers `_ipp._tcp.local` and `_ipps._tcp.local`, resolves each service's own SRV target and A record, uses its advertised port and TXT `rp` path, and sends IPP Get-Printer-Attributes. It does not assume that a device answering mDNS is a PDF printer.
 
@@ -52,7 +52,7 @@ that can cause an unnecessary Workbench output console.
 
 The build scripts now use strong library-base definitions (`-fno-common`) so the
 runtime does not pull in libnix's unintended window.library auto-opener. This
-preserves the explicit ReAction class/library lifecycle.
+preserves the explicit library lifecycle.
 
 Native discovery now has an observed pass: the ReAction default view showed
 the colour HP as PDF confirmed/ready, and Show all subsequently showed six
