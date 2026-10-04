@@ -59,7 +59,7 @@ The next conversion work should use:
          -> durable queue -> explicitly selected destination
 
 Each backend must report View, Paginate, Export PDF and Print capabilities
-separately. ReAction enables only the supported actions and explains a missing
+separately. The viewer enables only the supported actions and explains a missing
 backend. Work occurs in a worker, with progress, cancellation and preserved
 input/output. Office backends must lay out text, fonts, images, tables and
 slides; animation/video export must explicitly select a frame or contact sheet.
@@ -71,11 +71,12 @@ identified to the user.
 
 ## Use on Instance-23
 
-For a supported image: open OpenAmigaView, Open the picture, choose page size,
-orientation, fit/fill and margins, then Save PDF to a NEW filename. Add to queue
-renders without sending paper. The original-resolution source is retained.
-OpenAmigaPrint's Print button now starts the background send worker. Browse
-still verifies application/pdf. The old large uncertain job must not be retried
+For a supported image: open OpenAmigaView, Open the picture (or drop it on the
+window), set Paper, Turn and Size under Page setup, then Print... . The viewer
+renders the page to a queued PDF (original-resolution source retained) and opens
+the Print requester on it; Save as PDF... writes it to a file instead. A PDF
+opened in the viewer goes straight to the Print requester. Printers and
+queue... opens C:OAPPrinters, which still verifies application/pdf. The old large uncertain job must not be retried
 until its printer outcome is checked.
 
 ## Checks

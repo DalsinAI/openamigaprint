@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include <exec/types.h>
 #include <exec/execbase.h>
 #include <exec/memory.h>

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include "oav_core.h"
 #include <stdio.h>
 static int row(void *ctx,unsigned long y,unsigned char *p,size_t n)

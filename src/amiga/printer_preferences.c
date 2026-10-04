@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include "oap_selection.h"
 #include <dos/dos.h>
 #include <dos/var.h>

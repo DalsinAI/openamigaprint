@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* Guest request/worker smoke test. Invalid URI ensures no network print. */
 #include "oav_jobs.h"
 #include <exec/types.h>
