@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
 """Generate the classic Workbench icon for DEVS:Printers/OpenAmigaPrint."""
 from __future__ import annotations
 

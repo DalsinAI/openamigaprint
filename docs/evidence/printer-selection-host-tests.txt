@@ -1,0 +1,11 @@
+./build/test_core
+ok - parse default IPP URI
+ok - parse explicit port
+ok - IPPS deliberately deferred
+ok - build IPP Print-Job prefix
+ok - IPP advertises PDF document format
+ok - write demo PDF
+./build/test_discovery
+PASS: 942 discovery, MIME gating, DNS bounds, complete HTTP and IPP checks
+./build/test_submit
+PASS: 102 submission, cancellation, uncertainty and cleanup checks; no network used
