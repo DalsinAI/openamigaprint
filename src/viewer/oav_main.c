@@ -57,6 +57,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *UtilityBase, *DataTypesBase, *AslBase, *GadToolsBase, *WorkbenchBase;
 struct RxsLib *RexxSysBase;
+static const char oap_version[] __attribute__((used)) = "$VER: OpenAmigaView 0.3 (4.10.2026)";
 
 #define MAX_JOBS 128
 #define REXX_NAME "OPENAMIGAVIEW"

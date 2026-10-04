@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 unsigned long __stack = 65536;
+static const char oap_version[] __attribute__((used)) = "$VER: OAVWorker 0.3 (4.10.2026)";
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *DataTypesBase;
