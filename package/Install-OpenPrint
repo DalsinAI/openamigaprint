@@ -96,6 +96,10 @@
 (if (exists "C:OpenAmigaView") (set #old 1))
 (if (exists "DEVS:Printers/OpenAmigaPrint") (set #old 1))
 (if (exists (tackon #where "OpenAmigaPrint")) (set #old 1))
+; Earlier instructions put copies in SYS:Tools as well.
+(if (exists "SYS:Tools/OpenAmigaPrint") (set #old 1))
+(if (exists "SYS:Tools/OpenAmigaView") (set #old 1))
+(if (exists "SYS:Tools/OAPPrinters") (set #old 1))
 (if #old
     (
         (set #store "SYS:Storage/OpenPrint-Superseded")
@@ -112,6 +116,18 @@
             (rename (tackon #where "OpenAmigaPrint") (tackon #store "OpenAmigaPrint-drawer")))
         (if (exists (tackon #where "OpenAmigaPrint.info"))
             (rename (tackon #where "OpenAmigaPrint.info") (tackon #store "OpenAmigaPrint-drawer.info")))
+        (if (exists "SYS:Tools/OpenAmigaPrint")
+            (rename "SYS:Tools/OpenAmigaPrint" (tackon #store "Tools-OpenAmigaPrint")))
+        (if (exists "SYS:Tools/OpenAmigaPrint.info")
+            (rename "SYS:Tools/OpenAmigaPrint.info" (tackon #store "Tools-OpenAmigaPrint.info")))
+        (if (exists "SYS:Tools/OpenAmigaView")
+            (rename "SYS:Tools/OpenAmigaView" (tackon #store "Tools-OpenAmigaView")))
+        (if (exists "SYS:Tools/OpenAmigaView.info")
+            (rename "SYS:Tools/OpenAmigaView.info" (tackon #store "Tools-OpenAmigaView.info")))
+        (if (exists "SYS:Tools/OAPPrinters")
+            (rename "SYS:Tools/OAPPrinters" (tackon #store "Tools-OAPPrinters")))
+        (if (exists "SYS:Tools/OAPPrinters.info")
+            (rename "SYS:Tools/OAPPrinters.info" (tackon #store "Tools-OAPPrinters.info")))
     ))
 
 (exit
