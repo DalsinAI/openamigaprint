@@ -1,6 +1,6 @@
 Short:        Print to network PDF printers, IPP
-Uploader:     (Dale fills this in at upload time)
-Author:       Dale Kirkwood (Dalsin Limited)
+Uploader:     (We fill this in at upload time)
+Author:       Dalsin Limited
 Type:         text/print
 Version:      0.3
 Requires:     bsdsocket.library (OpenSocket, Roadshow, AmiTCP or Miami)
