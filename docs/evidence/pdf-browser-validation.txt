@@ -1,0 +1,19 @@
+OpenAmigaPrint PDF browser validation - 2026-10-03
+
+./build/test_core
+ok - parse default IPP URI
+ok - parse explicit port
+ok - IPPS deliberately deferred
+ok - build IPP Print-Job prefix
+ok - IPP advertises PDF document format
+ok - write demo PDF
+mkdir -p build
+cc -Iinclude -O2 -Wall -Wextra -std=c11 -Wno-misleading-indentation -o build/test_discovery tests/test_discovery.c src/discovery/protocol.c src/discovery/http.c
+./build/test_discovery
+PASS: 942 discovery, MIME gating, DNS bounds, complete HTTP and IPP checks
+PASS: 942 discovery, MIME gating, DNS bounds, complete HTTP and IPP checks
+
+Native binaries compile: OpenAmigaPrint, OpenAmigaView, OAVWorker, OAPDiscover, OAPPrinters.
+Host live discovery: six endpoints on three physical printers; one plain-IPP endpoint confirmed application/pdf, one confirmed no PDF, one returned HTTP 426. Secure endpoints correctly remained unverified.
+Native Instance-23: OAPDiscover loaded; subsequent observed loads were bsdsocket.library and acnet.device. No native discovery result or printer sockets yet. UI inputs stopped producing visible changes. Native acceptance and physical print remain unverified.
+No driver, spooler, or startup-script changes were deployed. No restart or physical Print-Job was performed by this validation.

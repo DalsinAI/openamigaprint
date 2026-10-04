@@ -1,0 +1,26 @@
+--- a/host/native/hostsocket.py
++++ b/host/native/hostsocket.py
+@@ -261,6 +261,8 @@
+         if cmd == CMD_SENDTO:
+             ip, port = parse_sockaddr(tx[:16])
+             dest = self._dest(ip, port, h.kind)
++            if dest == ("224.0.0.251", 5353):
++                s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+             n = s.sendto(tx[16:], self._flags(a1) | socket.MSG_NOSIGNAL, dest)
+             # UDP clients commonly rely on the kernel to auto-bind an
+             # ephemeral source port on their first send.  That port is part
+@@ -397,7 +399,13 @@
+             if host_port is None:
+                 raise Err("ECONNREFUSED")
+             return "127.0.0.1", host_port
+-        if addr in NOWHERE or addr in MULTICAST:
++        if addr in NOWHERE:
++            raise Err("ENETUNREACH")
++        if addr in MULTICAST:
++            # One-shot DNS-SD discovery: local mDNS queries and unicast replies.
++            # Keep all other multicast destinations and all multicast TCP denied.
++            if kind == SOCK_DGRAM and ip == "224.0.0.251" and port == 5353:
++                return ip, port
+             raise Err("ENETUNREACH")
+         if ip in self._host_addrs():
+             self.stats["refused"] += 1

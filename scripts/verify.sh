@@ -16,7 +16,7 @@ if grep -Eq 'warning:|error:' "$ROOT/build/verify-amiga-build.log"; then
     exit 1
 fi
 
-for f in OpenAmigaPrint oapspool.device oapspooltest oapprinttest OpenAmigaPrint.driver; do
+for f in OpenAmigaPrint oapspool.device oapspooltest oapstatustest oapprinttest OpenAmigaPrint.driver; do
     test -s "$B/$f"
     file "$B/$f" | grep -q 'AmigaOS loadseg'
 done
@@ -36,4 +36,4 @@ fi
 
 echo "OpenAmigaPrint verification: PASS"
 sha256sum "$B/OpenAmigaPrint" "$B/oapspool.device" "$B/oapspooltest" \
-  "$B/oapprinttest" "$B/OpenAmigaPrint.driver" "$B/OpenAmigaPrint.info"
+  "$B/oapstatustest" "$B/oapprinttest" "$B/OpenAmigaPrint.driver" "$B/OpenAmigaPrint.info"
