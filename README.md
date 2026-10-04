@@ -115,7 +115,11 @@ Plain IPP is first light. IPPS will be added behind a TLS abstraction rather tha
 
 ## Licence
 
-OpenAmigaPrint source is intended to be freely distributable under the BSD 2-Clause licence. The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
+OpenAmigaPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. Dale, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
+
+The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenAmigaPrint by Dalsin Limited.
+
+The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
 
 ## Queue and graphics printing
 

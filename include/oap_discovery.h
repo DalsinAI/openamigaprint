@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #ifndef OAP_DISCOVERY_H
 #define OAP_DISCOVERY_H
 #include <stddef.h>
