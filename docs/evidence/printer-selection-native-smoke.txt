@@ -1,0 +1,3 @@
+PASS: 200 native Exec selection checks; 0 failures
+Same URI, multiple windows, no tick/focus dependency, separate sender, queued cleanup.
+No print job, network access or printer preference write.

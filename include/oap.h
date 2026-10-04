@@ -29,10 +29,15 @@ void oap_job_defaults(OAPJobOptions *o);
 int oap_parse_ipp_uri(const char *uri, OAPUri *out);
 int oap_ipp_build_prefix(const OAPJobOptions *o, unsigned char *buf, size_t cap, size_t *out_len);
 int oap_pdf_write_demo(const char *path, const char *title);
+enum { OAP_SEND_ERROR=0, OAP_SEND_ACCEPTED=1, OAP_SEND_UNCERTAIN=-1, OAP_SEND_CANCELLED=-2 };
+typedef int (*OAPSendProgress)(void *ctx,const char *stage,unsigned long sent,unsigned long total);
+int oap_ipp_submit_pdf_ex(const char *,const OAPJobOptions *,char *,size_t,OAPSendProgress,void *);
 #ifdef __amigaos__
 int oap_ipp_submit_pdf(const char *pdf_path,const OAPJobOptions *o,char *status,size_t status_len);
 int oap_run_print_dialog(const char *pdf_path,OAPJobOptions *o);
 int oap_run_queue_window(void);
+int oap_selected_printer(char *uri,size_t capacity);
+int oap_launch_printer_browser(void);
 #endif
 
 #endif

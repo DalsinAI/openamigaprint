@@ -1,0 +1,13 @@
+Instance-23 native print UI smoke - 3 October 2026
+
+Opened the rebuilt C:OpenAmigaPrint with Work:OpenAmigaPrint.pdf (818 bytes)
+and the deliberately invalid destination string "invalid".
+Clicked the visible Print button.
+The separate OAVWorker wrote its request.result file with:
+state=error
+message=Invalid ipp:// URI; select a verified printer
+
+The original print window displayed that error, remained open, and enabled
+Print again. No socket was opened and no Print-Job was sent during this test.
+After the smoke run the latest runtime sample reported zero access faults.
+This verifies the UI-to-worker error path, not physical printer completion.

@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 
+unsigned long __stack = 65536;
+
 int main(int argc,char **argv)
 {
     OAPJobOptions o; const char *pdf;
