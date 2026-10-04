@@ -1,4 +1,4 @@
 PASS: schema2/schema3, copies/layout/duplex/pages, terminal states and separate worker result
-Request: SYS:Spool/OpenAmigaView/v-0000458f-003c8351-0001.req
+Request: SYS:Spool/OpenView/v-0000458f-003c8351-0001.req
 Result: error Invalid ipp:// URI; select a verified printer
 No physical print was requested; deliberately invalid URI.

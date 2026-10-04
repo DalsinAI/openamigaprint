@@ -32,14 +32,14 @@ static int wait_for_spooler(void)
 }
 static void draw_card(struct RastPort *rp)
 {
-    int i;static const char title[]="OpenAmigaPrint raster test";
+    int i;static const char title[]="OpenPrint raster test";
     SetAPen(rp,0);RectFill(rp,0,0,319,199);
     for(i=0;i<6;i++){SetAPen(rp,(UBYTE)(i+2));RectFill(rp,16+i*48,24,55+i*48,78);}
     SetAPen(rp,1);Move(rp,12,12);Draw(rp,307,12);Draw(rp,307,187);Draw(rp,12,187);Draw(rp,12,12);
     Move(rp,16,106);Text(rp,(STRPTR)title,(ULONG)strlen(title));
     SetAPen(rp,4);Move(rp,18,128);Draw(rp,296,170);
     SetAPen(rp,2);Move(rp,18,170);Draw(rp,296,128);
-    SetAPen(rp,1);Move(rp,16,184);Text(rp,(STRPTR)"PRD_DUMPRPORT -> OpenAmigaPrint",31);
+    SetAPen(rp,1);Move(rp,16,184);Text(rp,(STRPTR)"PRD_DUMPRPORT -> OpenPrint",31);
 }
 int main(int argc,char **argv)
 {
@@ -62,7 +62,7 @@ int main(int argc,char **argv)
     }
     DoIO((struct IORequest *)io);
     if(io->io_Error){printf("OAPImageTest: PRD_DUMPRPORT error %ld\n",(long)io->io_Error);goto close_device;}
-    puts("OpenAmigaPrint: raster picture job submitted");rc=0;
+    puts("OpenPrint: raster picture job submitted");rc=0;
 close_device:
     CloseDevice((struct IORequest *)io);
 out:

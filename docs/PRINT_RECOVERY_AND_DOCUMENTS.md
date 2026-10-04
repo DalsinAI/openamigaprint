@@ -5,13 +5,13 @@
 Instance-23 stopped updating at "Sending job to printer". The native runtime
 was repeatedly faulting (over 650,000 access faults in a five-second sample).
 The old transport routine's compiler-reported stack requirement was 14,084
-bytes. The installed OpenAmigaPrint Workbench icon requested only 8,192 bytes,
+bytes. The installed OpenPrint Workbench icon requested only 8,192 bytes,
 and the application did not declare a larger libnix stack. This is a concrete
 stack-overflow defect; the exception log alone does not prove every fault's
 origin. The print dialog also performed networking synchronously.
 
 The repair moves the transport workspace to heap storage: the same compiler
-now reports 96 bytes for the extended transport routine. OpenAmigaPrint and
+now reports 96 bytes for the extended transport routine. OpenPrint and
 its generated icon request 65,536 bytes. The print dialog submits a versioned
 request to the separate OAVWorker process instead of uploading in its event
 loop. Copies, paper, orientation, colour, duplex and page ranges travel with
@@ -42,7 +42,7 @@ replaced by this repair.
   PDF. A PDF reader is not required merely to forward the existing PDF.
 - Native application printing: a program that can open its document and uses
   normal printer.device text or raster printing can render it through the
-  OpenAmigaPrint driver. Application compatibility still needs testing.
+  OpenPrint driver. Application compatibility still needs testing.
 - Text/document datatypes: the viewer may display them, but this worker's
   direct export is currently restricted to GID_PICTURE. Viewing and PDF export
   are different capabilities. Generic DTM_PRINT output is not wired here yet.
@@ -71,7 +71,7 @@ identified to the user.
 
 ## Use on Instance-23
 
-For a supported image: open OpenAmigaView, Open the picture (or drop it on the
+For a supported image: open OpenView, Open the picture (or drop it on the
 window), set Paper, Turn and Size under Page setup, then Print... . The viewer
 renders the page to a queued PDF (original-resolution source retained) and opens
 the Print requester on it; Save as PDF... writes it to a file instead. A PDF

@@ -34,7 +34,7 @@ int main(void)
     ULONG sz=sizeof(struct PrinterData);
 
     mark("OAPCb.00-start","callback probe started\n");
-    seg=LoadSeg((STRPTR)"DEVS:Printers/OpenAmigaPrint");
+    seg=LoadSeg((STRPTR)"DEVS:Printers/OpenPrint");
     if(!seg){mark("OAPCb.01-load","FAIL LoadSeg\n");goto done;}
     mark("OAPCb.01-load","PASS LoadSeg\n");
     ps=(struct PrinterSegment *)BADDR(seg);ped=&ps->ps_PED;

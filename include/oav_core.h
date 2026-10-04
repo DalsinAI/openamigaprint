@@ -8,7 +8,7 @@
 #define OAV_PIXEL_LIMIT 16777216UL
 #define OAV_FILE_LIMIT 67108864UL
 #define OAV_VERSION "0.2.0-alpha1"
-#define OAV_REQUEST_DIR "SYS:Spool/OpenAmigaView"
+#define OAV_REQUEST_DIR "SYS:Spool/OpenView"
 enum { OAV_A4, OAV_LETTER };
 enum { OAV_FIT, OAV_FILL };
 typedef struct OAVLayout { int paper, landscape, scale; long margin_cpt; } OAVLayout;

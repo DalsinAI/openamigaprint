@@ -43,13 +43,13 @@ timer_done:
     if(l){mark("OAPPre.02-envprefs","PASS ENV:Sys/printer.prefs exists\n");UnLock(l);}
     else mark("OAPPre.02-envprefs","FAIL ENV:Sys/printer.prefs missing\n");
 
-    l=Lock((STRPTR)"DEVS:Printers/OpenAmigaPrint",ACCESS_READ);
+    l=Lock((STRPTR)"DEVS:Printers/OpenPrint",ACCESS_READ);
     if(l){mark("OAPPre.03-driverfile","PASS driver file exists\n");UnLock(l);}
     else mark("OAPPre.03-driverfile","FAIL driver file missing\n");
 
-    seg=LoadSeg((STRPTR)"DEVS:Printers/OpenAmigaPrint");
-    if(!seg){mark("OAPPre.04-loadseg","FAIL LoadSeg OpenAmigaPrint\n");goto done;}
-    mark("OAPPre.04-loadseg","PASS LoadSeg OpenAmigaPrint\n");
+    seg=LoadSeg((STRPTR)"DEVS:Printers/OpenPrint");
+    if(!seg){mark("OAPPre.04-loadseg","FAIL LoadSeg OpenPrint\n");goto done;}
+    mark("OAPPre.04-loadseg","PASS LoadSeg OpenPrint\n");
     ps=(struct PrinterSegment *)BADDR(seg);
     ped=&ps->ps_PED;
     memset(out,0,sizeof(out));
@@ -58,8 +58,8 @@ timer_done:
     else
         strcpy(out,"FAIL printer segment header/PED invalid\n");
     mark("OAPPre.05-segment",out);
-    if(ped->ped_PrinterName && !strcmp((char *)ped->ped_PrinterName,"OpenAmigaPrint"))
-        mark("OAPPre.06-name","PASS PED name OpenAmigaPrint\n");
+    if(ped->ped_PrinterName && !strcmp((char *)ped->ped_PrinterName,"OpenPrint"))
+        mark("OAPPre.06-name","PASS PED name OpenPrint\n");
     else
         mark("OAPPre.06-name","FAIL PED name mismatch\n");
     UnLoadSeg(seg);seg=0;

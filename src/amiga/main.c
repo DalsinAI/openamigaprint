@@ -4,7 +4,7 @@
 #include <string.h>
 
 unsigned long __stack = 65536;
-static const char oap_version[] __attribute__((used)) = "$VER: OpenAmigaPrint 0.3 (4.10.2026)";
+static const char oap_version[] __attribute__((used)) = "$VER: OpenPrint 0.3 (4.10.2026)";
 
 static int print_main(int argc,char **argv)
 {
