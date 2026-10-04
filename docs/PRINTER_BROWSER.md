@@ -1,8 +1,8 @@
-# PDF printer browser - native ReAction delivery
+# PDF printer browser - native GadTools delivery
 
 ## What this change installs
 
-`C:OAPPrinters` is the native ReAction browser. `C:OAPDiscover` is its separate network worker. Both the existing OpenAmigaPrint per-job dialog and OpenAmigaView have a Browse button. The existing printer driver and spooler do not need replacement for this change.
+`C:OAPPrinters` is the Printers and Queue window, in GadTools (it was ReAction until 4 October 2026). `C:OAPDiscover` is its separate network worker. Both the existing OpenAmigaPrint per-job dialog and OpenAmigaView have a Browse button. The existing printer driver and spooler do not need replacement for this change.
 
 The browser discovers `_ipp._tcp.local` and `_ipps._tcp.local`, resolves each service's own SRV target and A record, uses its advertised port and TXT `rp` path, and sends IPP Get-Printer-Attributes. It does not assume that a device answering mDNS is a PDF printer.
 
@@ -18,7 +18,7 @@ Selection is saved in `ENV:OpenAmigaPrint/PrinterURI` and `ENVARC:OpenAmigaPrint
 4. Set one copy and one-sided, then click Print once.
 5. An accepted IPP job-id is evidence of submission, not evidence of physical printing. Check the printer output before reporting an end-to-end pass. Do not repeatedly resend an uncertain submission.
 
-For image printing, launch OpenAmigaView, open the image, configure page layout, Add to queue, select the resulting PDF, Browse printers, then Send. This browser does not add missing document codecs or replace the viewer's rendering engine.
+For image printing, open the image in OpenAmigaView (or drop it on its window), set Paper, Turn and Size under Page setup, then choose Print... . The viewer makes the PDF and opens the same Print requester on it. This window does not add missing document codecs or replace the viewer's rendering engine.
 
 ## Build and tests
 
@@ -39,7 +39,7 @@ The regression suite covers exact MIME matching, missing capability attributes, 
 
 ## Protocol references
 
-DNS-SD records: RFC 6763. One-shot mDNS clients: RFC 6762 section 6.7. IPP Get-Printer-Attributes and document-format-supported: RFC 8011. Implementation and tests in this change are original BSD-2-Clause code.
+DNS-SD records: RFC 6763. One-shot mDNS clients: RFC 6762 section 6.7. IPP Get-Printer-Attributes and document-format-supported: RFC 8011. Implementation and tests in this change are original code, under OpenAmigaPrint's MIT licence.
 
 ## 3 October follow-up: empty Show all list
 
@@ -52,7 +52,7 @@ that can cause an unnecessary Workbench output console.
 
 The build scripts now use strong library-base definitions (`-fno-common`) so the
 runtime does not pull in libnix's unintended window.library auto-opener. This
-preserves the explicit ReAction class/library lifecycle.
+preserves the explicit library lifecycle.
 
 Native discovery now has an observed pass: the ReAction default view showed
 the colour HP as PDF confirmed/ready, and Show all subsequently showed six
