@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* OpenAmigaPrint's Printers and Queue window (C:OAPPrinters), in ReAction.
- * It replaces the separate printer browser and the GadTools queue window, as
- * the 3 October 2026 review set out:
+/* OpenAmigaPrint's Printers and Queue window (C:OAPPrinters), in GadTools
+ * (Dale, 4 October 2026: OS 3.x applications use GadTools or MUI, not
+ * ReAction). It replaces the separate printer browser and queue window, as
+ * the 3 October review set out:
  *   - printers by name, with their state and whether they take PDF; the
  *     address shows only for the printer selected;
  *   - discovery reports its progress and ends with a count or a reason;
@@ -9,10 +10,12 @@
  *     Print requester offers them without a new search;
  *   - one queue for every job, from printer.device and OpenAmigaView alike;
  *   - menus with Amiga-key shortcuts, and a key on every button.
+ * The lists use the system's fixed-width font so their columns line up.
  * Network work stays with C:OAPDiscover; only printers verified to take PDF
  * can be used for printing. */
 #include "oap.h"
 #include "oap_discovery.h"
+#include "oap_gt.h"
 #include "oap_printers.h"
 #include "oap_stack.h"
 #include "oap_queue.h"
@@ -22,42 +25,27 @@
 #include <exec/lists.h>
 #include <dos/dos.h>
 #include <dos/dostags.h>
+#include <dos/var.h>
 #include <intuition/intuition.h>
 #include <intuition/intuitionbase.h>
-#include <intuition/gadgetclass.h>
+#include <graphics/gfxbase.h>
 #include <libraries/gadtools.h>
-#include <classes/window.h>
-#include <gadgets/layout.h>
-#include <gadgets/button.h>
-#include <gadgets/string.h>
-#include <gadgets/listbrowser.h>
-#include <gadgets/checkbox.h>
-#include <gadgets/space.h>
-#include <images/label.h>
-#include <images/bevel.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
-#include <proto/window.h>
-#include <proto/layout.h>
-#include <proto/button.h>
-#include <proto/string.h>
-#include <proto/listbrowser.h>
-#include <proto/checkbox.h>
-#include <proto/space.h>
-#include <proto/label.h>
-#include <reaction/reaction_macros.h>
+#include <proto/graphics.h>
+#include <proto/gadtools.h>
 #include <clib/alib_protos.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-unsigned long __stack = 65536;
 struct IntuitionBase *IntuitionBase;
-struct Library *WindowBase, *LayoutBase, *ButtonBase, *StringBase, *ListBrowserBase, *CheckBoxBase, *LabelBase, *SpaceBase;
+struct GfxBase *GfxBase;
+struct Library *GadToolsBase;
 
-#define REG(r, t) register t __asm(#r)
 #define QUEUE_MAX 48
+#define ROW_MAX 200
 
 enum {
     G_PRINTERS = 1, G_SEARCH, G_SHOWALL, G_USE, G_TEST, G_ADDRESS, G_CHECK, G_DETAILS, G_URI,
@@ -69,23 +57,42 @@ typedef struct QueueRow {
     char pdf[256], name[64], state[48], printer[96], size[16];
 } QueueRow;
 
+typedef struct Row {
+    struct Node node;
+    char text[ROW_MAX];
+} Row;
+
+/* Where everything goes, from the window's size and the fonts. */
+typedef struct Geo {
+    int lx, ly, lw, lh;                 /* Printers on the network */
+    int rx, rw;                         /* Selected printer */
+    int qy, qh;                         /* Queue */
+    int plv_y, plv_h, qlv_y, qlv_h;     /* the two lists */
+    int y_check, y_status;
+    int pcols[3], qcols[4];             /* columns, in characters */
+} Geo;
+
 static struct Printers {
-    Object *window, *printers, *search, *showall, *use, *test, *address, *check, *details, *uri;
-    Object *queue, *qprint, *qremove, *qrefresh, *status;
+    OAPGT g;
+    Geo geo;
     struct Window *win;
-    struct Screen *screen;
-    struct Hook idcmp_hook;
+    struct Gadget *glist;
+    struct Menu *menu;
     struct List printer_rows, queue_rows;
+    Row prow[OAP_PRINTERS_MAX], qrow[QUEUE_MAX];
     OAPPrinterList known;
     OAPDiscovery scan;
     int row_printer[OAP_PRINTERS_MAX];          /* list row -> index in `known` */
-    int rows;
+    int rows, sel_printer;
     QueueRow jobs[QUEUE_MAX];
-    int job_count;
+    int job_count, sel_job;
+    ULONG click_secs, click_micros;
+    int click_row;
     char output[160], status_text[256], details_text[256], uri_text[OAP_SELECTION_URI_MAX];
-    char default_uri[OAP_SELECTION_URI_MAX];
-    int scanning, show_all, ticks, poll, queue_ticks, generation, scan_polls;
+    char address[OAP_SELECTION_URI_MAX], default_uri[OAP_SELECTION_URI_MAX];
+    int scanning, show_all, ticks, queue_ticks, generation, scan_polls;
     unsigned long last_found;
+    int nat_w, nat_h, attached;
 } P;
 
 static struct NewMenu menus[] = {
@@ -104,14 +111,6 @@ static struct NewMenu menus[] = {
     { NM_END, NULL, NULL, 0, 0, NULL }
 };
 
-static struct ColumnInfo printer_columns[] = {
-    { 56, (STRPTR)"Printer", 0 }, { 32, (STRPTR)"State", 0 }, { 12, (STRPTR)"PDF", 0 }, { -1, NULL, 0 }
-};
-static struct ColumnInfo queue_columns[] = {
-    { 34, (STRPTR)"Document", 0 }, { 30, (STRPTR)"Printer", 0 }, { 24, (STRPTR)"State", 0 }, { 12, (STRPTR)"Size", 0 },
-    { -1, NULL, 0 }
-};
-
 static void copy(char *dst, size_t cap, const char *src)
 {
     if (!cap)
@@ -120,25 +119,30 @@ static void copy(char *dst, size_t cap, const char *src)
     dst[cap - 1] = 0;
 }
 
-static ULONG get(Object *o, ULONG attr)
+/* A gadget of ours, only while the list is in the window. */
+static struct Gadget *gad(UWORD id)
 {
-    ULONG v = 0;
-    GetAttr(attr, o, &v);
-    return v;
+    return P.attached ? oap_gt_find(P.glist, id) : NULL;
 }
 
-static void set(Object *o, Tag tag, ULONG value)
+static void set_disabled(UWORD id, int off)
 {
-    if (P.win)
-        SetGadgetAttrs((struct Gadget *)o, P.win, NULL, tag, value, TAG_DONE);
-    else
-        SetAttrs(o, tag, value, TAG_DONE);
+    struct Gadget *g = gad(id);
+    if (g && P.win)
+        GT_SetGadgetAttrs(g, P.win, NULL, GA_Disabled, off, TAG_DONE);
+}
+
+static void set_text(UWORD id, const char *text)
+{
+    struct Gadget *g = gad(id);
+    if (g && P.win)
+        GT_SetGadgetAttrs(g, P.win, NULL, GTTX_Text, (ULONG)text, TAG_DONE);
 }
 
 static void show_status(const char *text)
 {
     copy(P.status_text, sizeof(P.status_text), text);
-    set(P.status, GA_Text, (ULONG)P.status_text);
+    set_text(G_STATUS, P.status_text);
 }
 
 static int run_async(const char *cmd)
@@ -152,6 +156,23 @@ static int run_async(const char *cmd)
         return 0;
     }
     return 1;
+}
+
+/* A row of columns, each cut or padded to its width in characters. */
+static void columns(char *out, size_t cap, const int *widths, int n, const char **cells)
+{
+    size_t used = 0;
+    int c;
+    out[0] = 0;
+    for (c = 0; c < n && used + 1 < cap; c++) {
+        int w = widths[c], i;
+        const char *s = cells[c] ? cells[c] : "";
+        for (i = 0; i < w && used + 1 < cap; i++)
+            out[used++] = (i < w - 1 && *s) ? *s++ : ' ';
+    }
+    while (used && out[used - 1] == ' ')
+        used--;
+    out[used] = 0;
 }
 
 /* ---- printers ----------------------------------------------------------- */
@@ -176,16 +197,20 @@ static const char *state_word(const OAPPrinter *p)
 
 static OAPPrinter *selected_printer(void)
 {
-    ULONG row = get(P.printers, LISTBROWSER_Selected);
-    if ((int)row < 0 || (int)row >= P.rows)
+    if (P.sel_printer < 0 || P.sel_printer >= P.rows)
         return NULL;
-    return &P.known.printer[P.row_printer[row]];
+    return &P.known.printer[P.row_printer[P.sel_printer]];
+}
+
+static int usable(void)
+{
+    OAPPrinter *p = selected_printer();
+    return p && p->pdf == OAP_PDF_YES && !P.scanning;
 }
 
 static void show_details(void)
 {
     OAPPrinter *p = selected_printer();
-    int usable = p && p->pdf == OAP_PDF_YES && !P.scanning;
     if (!p) {
         copy(P.details_text, sizeof(P.details_text), "Select a printer to see what it can do.");
         P.uri_text[0] = 0;
@@ -194,44 +219,45 @@ static void show_details(void)
                  !strcmp(p->uri, P.default_uri) ? " (default)" : "");
         copy(P.uri_text, sizeof(P.uri_text), p->uri);
     }
-    set(P.details, GA_Text, (ULONG)P.details_text);
-    set(P.uri, STRINGA_TextVal, (ULONG)P.uri_text);
-    set(P.use, GA_Disabled, !usable);
-    set(P.test, GA_Disabled, !usable);
+    set_text(G_DETAILS, P.details_text);
+    set_text(G_URI, P.uri_text);
+    set_disabled(G_USE, !usable());
+    set_disabled(G_TEST, !usable());
 }
 
 static void fill_printers(void)
 {
-    struct Node *n;
-    int i, select = -1;
-    char name[OAP_PRINTER_NAME_MAX + 12];
+    struct Gadget *lv = gad(G_PRINTERS);
+    char name[OAP_PRINTER_NAME_MAX + 4];
     OAPPrinter *was = selected_printer();
     char keep[OAP_SELECTION_URI_MAX];
+    int i;
     copy(keep, sizeof(keep), was ? was->uri : P.default_uri);
-    set(P.printers, LISTBROWSER_Labels, (ULONG)~0);
-    while ((n = RemHead(&P.printer_rows)))
-        FreeListBrowserNode(n);
+    if (lv && P.win)
+        GT_SetGadgetAttrs(lv, P.win, NULL, GTLV_Labels, ~0UL, TAG_DONE);
+    NewList(&P.printer_rows);
     P.rows = 0;
+    P.sel_printer = -1;
     for (i = 0; i < P.known.count && P.rows < OAP_PRINTERS_MAX; i++) {
         OAPPrinter *p = &P.known.printer[i];
+        const char *cells[3];
+        Row *r = &P.prow[P.rows];
         if (oap_printer_is_file(p) || (!P.show_all && p->pdf != OAP_PDF_YES))
             continue;
         snprintf(name, sizeof(name), "%s%s", p->name, !strcmp(p->uri, P.default_uri) ? " *" : "");
-        n = AllocListBrowserNode(3, LBNA_Column, 0, LBNCA_CopyText, TRUE, LBNCA_Text, (ULONG)name,
-                                 LBNA_Column, 1, LBNCA_CopyText, TRUE, LBNCA_Text, (ULONG)state_word(p),
-                                 LBNA_Column, 2, LBNCA_CopyText, TRUE, LBNCA_Text, (ULONG)pdf_word(p->pdf), TAG_DONE);
-        if (!n)
-            break;
-        AddTail(&P.printer_rows, n);
+        cells[0] = name;
+        cells[1] = state_word(p);
+        cells[2] = pdf_word(p->pdf);
+        columns(r->text, sizeof(r->text), P.geo.pcols, 3, cells);
+        r->node.ln_Name = r->text;
+        AddTail(&P.printer_rows, &r->node);
         if (!strcmp(p->uri, keep))
-            select = P.rows;
+            P.sel_printer = P.rows;
         P.row_printer[P.rows++] = i;
     }
-    if (P.win)
-        SetGadgetAttrs((struct Gadget *)P.printers, P.win, NULL, LISTBROWSER_Labels, (ULONG)&P.printer_rows,
-                       LISTBROWSER_Selected, select, LISTBROWSER_MakeVisible, select < 0 ? 0 : select, TAG_DONE);
-    else
-        SetAttrs(P.printers, LISTBROWSER_Labels, (ULONG)&P.printer_rows, LISTBROWSER_Selected, select, TAG_DONE);
+    if (lv && P.win)
+        GT_SetGadgetAttrs(lv, P.win, NULL, GTLV_Labels, (ULONG)&P.printer_rows, GTLV_Selected, (ULONG)P.sel_printer,
+                          GTLV_Top, P.sel_printer < 0 ? 0 : P.sel_printer, TAG_DONE);
     show_details();
 }
 
@@ -274,9 +300,18 @@ static void begin_scan(const char *uri)
     P.scanning = 1;
     P.scan_polls = 0;
     P.last_found = 0;
-    set(P.search, GA_Disabled, TRUE);
-    set(P.check, GA_Disabled, TRUE);
+    set_disabled(G_SEARCH, TRUE);
+    set_disabled(G_CHECK, TRUE);
     show_status(uri ? "Asking that printer what it can print..." : "Searching the network for printers...");
+    fill_printers();
+}
+
+static void end_scan(void)
+{
+    P.scanning = 0;
+    set_disabled(G_SEARCH, FALSE);
+    set_disabled(G_CHECK, FALSE);
+    oap_printers_save(&P.known);
     fill_printers();
 }
 
@@ -290,14 +325,9 @@ static void poll_scan(void)
     if (!P.scanning)
         return;
     if (++P.scan_polls > 90) {                 /* polls come about twice a second: 45 seconds */
-        P.scanning = 0;
-        set(P.search, GA_Disabled, FALSE);
-        set(P.check, GA_Disabled, FALSE);
-        oap_printers_save(&P.known);
-        fill_printers();
-        snprintf(text, sizeof(text), "The search didn't finish: no answer from the network in 45 seconds. "
-                 "Check this Amiga's network is on, then Search again.");
-        show_status(text);
+        end_scan();
+        show_status("The search didn't finish: no answer from the network in 45 seconds. "
+                    "Check this Amiga's network is on, then Search again.");
         return;
     }
     if (!oap_discovery_load(P.output, &P.scan, &done, note, sizeof(note)))
@@ -315,12 +345,8 @@ static void poll_scan(void)
         show_status(text);
         return;
     }
-    P.scanning = 0;
     DeleteFile((STRPTR)P.output);
-    set(P.search, GA_Disabled, FALSE);
-    set(P.check, GA_Disabled, FALSE);
-    oap_printers_save(&P.known);
-    fill_printers();
+    end_scan();
     if (note[0])
         snprintf(text, sizeof(text), "Search finished: %lu found. %s", found, note);
     else
@@ -343,8 +369,8 @@ static void use_printer(void)
     oap_printers_save(&P.known);
     oap_selection_publish(p->uri);
     copy(P.default_uri, sizeof(P.default_uri), p->uri);
-    fill_printers();
     snprintf(text, sizeof(text), "%s is now used for printing", p->name);
+    fill_printers();
     show_status(text);
 }
 
@@ -406,16 +432,24 @@ static void read_job(QueueRow *r)
         oap_printer_name_from_uri(printer, r->printer, sizeof(r->printer));
 }
 
+static QueueRow *selected_job(void)
+{
+    return P.sel_job >= 0 && P.sel_job < P.job_count ? &P.jobs[P.sel_job] : NULL;
+}
+
 static void fill_queue(void)
 {
+    struct Gadget *lv = gad(G_QUEUE);
     BPTR lock;
     struct FileInfoBlock *fib;
-    struct Node *n;
-    int i, select = (int)get(P.queue, LISTBROWSER_Selected);
-    set(P.queue, LISTBROWSER_Labels, (ULONG)~0);
-    while ((n = RemHead(&P.queue_rows)))
-        FreeListBrowserNode(n);
+    char keep[256];
+    int i;
+    copy(keep, sizeof(keep), selected_job() ? selected_job()->pdf : "");
+    if (lv && P.win)
+        GT_SetGadgetAttrs(lv, P.win, NULL, GTLV_Labels, ~0UL, TAG_DONE);
+    NewList(&P.queue_rows);
     P.job_count = 0;
+    P.sel_job = -1;
     lock = Lock((STRPTR)OAP_QUEUE_DIR, ACCESS_READ);
     fib = AllocDosObject(DOS_FIB, NULL);
     if (lock && fib && Examine(lock, fib)) {
@@ -440,24 +474,21 @@ static void fill_queue(void)
         UnLock(lock);
     for (i = 0; i < P.job_count; i++) {
         QueueRow *r = &P.jobs[i];
-        n = AllocListBrowserNode(4, LBNA_Column, 0, LBNCA_Text, (ULONG)r->name, LBNA_Column, 1,
-                                 LBNCA_Text, (ULONG)(r->printer[0] ? r->printer : "Not sent"), LBNA_Column, 2,
-                                 LBNCA_Text, (ULONG)r->state, LBNA_Column, 3, LBNCA_Text, (ULONG)r->size, TAG_DONE);
-        if (n)
-            AddTail(&P.queue_rows, n);
+        const char *cells[4];
+        cells[0] = r->name;
+        cells[1] = r->printer[0] ? r->printer : "Not sent";
+        cells[2] = r->state;
+        cells[3] = r->size;
+        columns(P.qrow[i].text, sizeof(P.qrow[i].text), P.geo.qcols, 4, cells);
+        P.qrow[i].node.ln_Name = P.qrow[i].text;
+        AddTail(&P.queue_rows, &P.qrow[i].node);
+        if (keep[0] && !strcmp(r->pdf, keep))
+            P.sel_job = i;
     }
-    if (select >= P.job_count)
-        select = P.job_count - 1;
-    set(P.queue, LISTBROWSER_Labels, (ULONG)&P.queue_rows);
-    set(P.queue, LISTBROWSER_Selected, (ULONG)select);
-    set(P.qprint, GA_Disabled, select < 0);
-    set(P.qremove, GA_Disabled, select < 0);
-}
-
-static QueueRow *selected_job(void)
-{
-    int row = (int)get(P.queue, LISTBROWSER_Selected);
-    return row >= 0 && row < P.job_count ? &P.jobs[row] : NULL;
+    if (lv && P.win)
+        GT_SetGadgetAttrs(lv, P.win, NULL, GTLV_Labels, (ULONG)&P.queue_rows, GTLV_Selected, (ULONG)P.sel_job, TAG_DONE);
+    set_disabled(G_QPRINT, P.sel_job < 0);
+    set_disabled(G_QREMOVE, P.sel_job < 0);
 }
 
 static void print_job(void)
@@ -499,115 +530,198 @@ static void remove_job(void)
     }
     Rename((STRPTR)from_job, (STRPTR)to_job);
     snprintf(text, sizeof(text), "%s moved to %s", r->name, dir);
-    show_status(text);
+    P.sel_job = -1;
     fill_queue();
+    show_status(text);
 }
 
 /* ---- the window --------------------------------------------------------- */
 
-static ULONG idcmp(REG(a0, struct Hook *h), REG(a2, Object *o), REG(a1, struct IntuiMessage *im))
+static void layout(int iw, int ih)
 {
-    (void)h;
-    (void)o;
-    if (im->Class == IDCMP_INTUITICKS && ++P.ticks >= 5) {
-        P.ticks = 0;
-        P.poll = 1;
+    OAPGT *g = &P.g;
+    Geo *G = &P.geo;
+    int gh = g->gad_h, fl = g->fixed->tf_YSize, right_h, chars, rest;
+    G->lx = OAP_GT_MARGIN;
+    G->ly = OAP_GT_MARGIN;
+    G->lw = (iw - 2 * OAP_GT_MARGIN - OAP_GT_GAP) * 58 / 100;
+    G->rx = G->lx + G->lw + OAP_GT_GAP;
+    G->rw = iw - OAP_GT_MARGIN - G->rx;
+    right_h = g->fh + OAP_GT_GAP + 2 * g->line_h + OAP_GT_GAP + gh + OAP_GT_GAP + 2 * gh + 4 + OAP_GT_GAP + g->line_h + gh + OAP_GT_GAP;
+    G->plv_y = G->ly + g->fh + OAP_GT_GAP + fl + 2;
+    G->plv_h = 6 * fl + 4;
+    G->y_check = G->plv_y + G->plv_h + OAP_GT_GAP;
+    G->lh = G->y_check + gh + OAP_GT_GAP - G->ly;
+    if (right_h > G->lh) {
+        G->plv_h += right_h - G->lh;
+        G->y_check += right_h - G->lh;
+        G->lh = right_h;
     }
-    return 0;
+    G->y_status = ih - OAP_GT_MARGIN - gh;
+    G->qy = G->ly + G->lh + OAP_GT_GAP;
+    G->qh = G->y_status - OAP_GT_GAP - G->qy;
+    G->qlv_y = G->qy + g->fh + OAP_GT_GAP + fl + 2;
+    G->qlv_h = G->qy + G->qh - OAP_GT_GAP - gh - OAP_GT_GAP - G->qlv_y;
+    /* columns, in characters of the fixed font: the list's width less its scroller */
+    chars = (G->lw - 2 * OAP_GT_INSET - 22) / g->fixed_w;
+    G->pcols[2] = 4;
+    G->pcols[1] = 19;
+    G->pcols[0] = (rest = chars - 23) > 8 ? rest : 8;
+    chars = (iw - 2 * OAP_GT_MARGIN - 2 * OAP_GT_INSET - 22) / g->fixed_w;
+    G->qcols[3] = 9;
+    G->qcols[2] = chars * 22 / 100 > 12 ? chars * 22 / 100 : 12;
+    G->qcols[1] = chars * 28 / 100 > 12 ? chars * 28 / 100 : 12;
+    G->qcols[0] = (rest = chars - G->qcols[1] - G->qcols[2] - G->qcols[3]) > 10 ? rest : 10;
 }
 
-static Object *button(const char *text, ULONG id)
+static void natural_size(void)
 {
-    return NewObject(BUTTON_GetClass(), NULL, GA_ID, id, GA_RelVerify, TRUE, GA_Text, (ULONG)text, TAG_DONE);
+    OAPGT *g = &P.g;
+    int left = 52 * g->fixed_w + 2 * OAP_GT_INSET + 22;      /* room for a long printer name */
+    int right = oap_gt_text_w(g, "Add a printer by address") + 2 * OAP_GT_INSET + 40;
+    int w;
+    if ((w = oap_gt_text_w(g, "Print a _test page...") + 2 * OAP_GT_INSET + 32) > right)
+        right = w;
+    P.nat_w = 2 * OAP_GT_MARGIN + OAP_GT_GAP + (left * 100 / 58 > left + right ? left * 100 / 58 : left + right);
+    layout(P.nat_w, 1000);
+    P.nat_h = P.geo.qy - 0 + g->fh + OAP_GT_GAP + g->fixed->tf_YSize + 2 + 5 * g->fixed->tf_YSize + 4 +
+              OAP_GT_GAP + g->gad_h + OAP_GT_GAP + OAP_GT_GAP + g->gad_h + OAP_GT_MARGIN;
 }
 
-static Object *text_line(ULONG id, const char *text, ULONG bevel)
+static void build(void)
 {
-    return NewObject(BUTTON_GetClass(), NULL, GA_ID, id, GA_ReadOnly, TRUE, BUTTON_BevelStyle, bevel,
-                     BUTTON_Justification, BCJ_LEFT, GA_Text, (ULONG)text, TAG_DONE);
+    OAPGT *g = &P.g;
+    Geo *G = &P.geo;
+    struct Gadget *p;
+    int bx = P.win->BorderLeft, by = P.win->BorderTop, gh = g->gad_h, iw, bw, x, cw;
+    iw = P.win->Width - P.win->BorderLeft - P.win->BorderRight;
+    layout(iw, P.win->Height - P.win->BorderTop - P.win->BorderBottom);
+    P.glist = NULL;
+    p = CreateContext(&P.glist);
+    /* printers */
+    p = CreateGadget(LISTVIEW_KIND, p, oap_gt_ng(g, bx + G->lx + OAP_GT_INSET, by + G->plv_y, G->lw - 2 * OAP_GT_INSET, G->plv_h,
+                     NULL, G_PRINTERS, 0, 1), GTLV_Labels, (ULONG)&P.printer_rows, GTLV_ShowSelected, 0UL,
+                     GTLV_Selected, (ULONG)P.sel_printer, TAG_DONE);
+    bw = oap_gt_text_w(g, "_Search again") + 16;
+    p = CreateGadget(CHECKBOX_KIND, p, oap_gt_ng(g, bx + G->lx + OAP_GT_INSET, by + G->y_check + (gh - 11) / 2, 26, 11,
+                     "Show _all printers", G_SHOWALL, PLACETEXT_RIGHT, 0), GTCB_Checked, P.show_all, GT_Underscore, '_', TAG_DONE);
+    p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + G->lx + G->lw - OAP_GT_INSET - bw, by + G->y_check, bw, gh, "_Search again",
+                     G_SEARCH, PLACETEXT_IN, 0), GT_Underscore, '_', GA_Disabled, P.scanning, TAG_DONE);
+    /* the selected printer */
+    x = G->rx + OAP_GT_INSET;
+    cw = G->rw - 2 * OAP_GT_INSET;
+    {
+        int y = G->ly + g->fh + OAP_GT_GAP;
+        p = CreateGadget(TEXT_KIND, p, oap_gt_ng(g, bx + x, by + y, cw, 2 * g->line_h, NULL, G_DETAILS, 0, 0),
+                         GTTX_Text, (ULONG)P.details_text, GTTX_CopyText, TRUE, TAG_DONE);
+        y += 2 * g->line_h + OAP_GT_GAP;
+        p = CreateGadget(TEXT_KIND, p, oap_gt_ng(g, bx + x, by + y, cw, gh, NULL, G_URI, 0, 0),
+                         GTTX_Text, (ULONG)P.uri_text, GTTX_Border, TRUE, GTTX_CopyText, TRUE, TAG_DONE);
+        y += gh + OAP_GT_GAP;
+        p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + x, by + y, cw, gh, "_Use for printing", G_USE, PLACETEXT_IN, 0),
+                         GT_Underscore, '_', GA_Disabled, !usable(), TAG_DONE);
+        y += gh + 4;
+        p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + x, by + y, cw, gh, "Print a _test page...", G_TEST, PLACETEXT_IN, 0),
+                         GT_Underscore, '_', GA_Disabled, !usable(), TAG_DONE);
+        y += gh + OAP_GT_GAP + g->line_h;           /* under "Add a printer by address" */
+        bw = oap_gt_text_w(g, "_Check") + 16;
+        p = CreateGadget(STRING_KIND, p, oap_gt_ng(g, bx + x, by + y, cw - bw - 4, gh, NULL, G_ADDRESS, 0, 0),
+                         GTST_String, (ULONG)P.address, GTST_MaxChars, OAP_SELECTION_URI_MAX - 1, TAG_DONE);
+        p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + x + cw - bw, by + y, bw, gh, "_Check", G_CHECK, PLACETEXT_IN, 0),
+                         GT_Underscore, '_', GA_Disabled, P.scanning, TAG_DONE);
+    }
+    /* the queue */
+    cw = iw - 2 * OAP_GT_MARGIN - 2 * OAP_GT_INSET;
+    p = CreateGadget(LISTVIEW_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN + OAP_GT_INSET, by + G->qlv_y, cw, G->qlv_h, NULL, G_QUEUE, 0, 1),
+                     GTLV_Labels, (ULONG)&P.queue_rows, GTLV_ShowSelected, 0UL, GTLV_Selected, (ULONG)P.sel_job, TAG_DONE);
+    bw = (cw - 2 * OAP_GT_GAP) / 3;
+    {
+        int y = G->qy + G->qh - OAP_GT_GAP - gh, x0 = OAP_GT_MARGIN + OAP_GT_INSET;
+        p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + x0, by + y, bw, gh, "_Print...", G_QPRINT, PLACETEXT_IN, 0),
+                         GT_Underscore, '_', GA_Disabled, P.sel_job < 0, TAG_DONE);
+        p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + x0 + bw + OAP_GT_GAP, by + y, bw, gh, "_Remove", G_QREMOVE, PLACETEXT_IN, 0),
+                         GT_Underscore, '_', GA_Disabled, P.sel_job < 0, TAG_DONE);
+        p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + x0 + 2 * (bw + OAP_GT_GAP), by + y, cw - 2 * (bw + OAP_GT_GAP), gh, "Re_fresh",
+                         G_QREFRESH, PLACETEXT_IN, 0), GT_Underscore, '_', TAG_DONE);
+    }
+    p = CreateGadget(TEXT_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN, by + G->y_status, iw - 2 * OAP_GT_MARGIN, gh, NULL, G_STATUS, 0, 0),
+                     GTTX_Text, (ULONG)P.status_text, GTTX_Border, TRUE, GTTX_CopyText, TRUE, TAG_DONE);
+    (void)p;
 }
 
-static Object *build_window(void)
+static void header(int x, int y, const int *widths, int n, const char **titles)
 {
-    P.printers = NewObject(LISTBROWSER_GetClass(), NULL, GA_ID, G_PRINTERS, GA_RelVerify, TRUE,
-                           LISTBROWSER_Labels, (ULONG)&P.printer_rows, LISTBROWSER_ColumnInfo, (ULONG)printer_columns,
-                           LISTBROWSER_ColumnTitles, TRUE, LISTBROWSER_ShowSelected, TRUE, LISTBROWSER_MinVisible, 6,
-                           TAG_DONE);
-    P.search = button("_Search again", G_SEARCH);
-    P.showall = NewObject(CHECKBOX_GetClass(), NULL, GA_ID, G_SHOWALL, GA_RelVerify, TRUE,
-                          GA_Text, (ULONG)"Show _all printers", CHECKBOX_Checked, FALSE, TAG_DONE);
-    P.details = text_line(G_DETAILS, "", BVS_NONE);
-    P.uri = NewObject(STRING_GetClass(), NULL, GA_ID, G_URI, GA_ReadOnly, TRUE, STRINGA_MaxChars, OAP_SELECTION_URI_MAX,
-                      STRINGA_TextVal, (ULONG)"", TAG_DONE);
-    P.use = button("_Use for printing", G_USE);
-    P.test = button("Print a _test page...", G_TEST);
-    P.address = NewObject(STRING_GetClass(), NULL, GA_ID, G_ADDRESS, GA_RelVerify, TRUE, STRINGA_MaxChars, 383,
-                          STRINGA_TextVal, (ULONG)"ipp://", TAG_DONE);
-    P.check = button("_Check", G_CHECK);
-    P.queue = NewObject(LISTBROWSER_GetClass(), NULL, GA_ID, G_QUEUE, GA_RelVerify, TRUE,
-                        LISTBROWSER_Labels, (ULONG)&P.queue_rows, LISTBROWSER_ColumnInfo, (ULONG)queue_columns,
-                        LISTBROWSER_ColumnTitles, TRUE, LISTBROWSER_ShowSelected, TRUE, LISTBROWSER_MinVisible, 5,
-                        TAG_DONE);
-    P.qprint = button("_Print...", G_QPRINT);
-    P.qremove = button("_Remove", G_QREMOVE);
-    P.qrefresh = button("Re_fresh", G_QREFRESH);
-    P.status = text_line(G_STATUS, P.status_text, BVS_THIN);
-
-    return NewObject(WINDOW_GetClass(), NULL,
-        WA_Title, (ULONG)"OpenAmigaPrint: Printers and Queue", WA_PubScreen, (ULONG)P.screen, WA_Activate, TRUE,
-        WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SizeGadget, TRUE,
-        WA_IDCMP, IDCMP_INTUITICKS | IDCMP_VANILLAKEY | IDCMP_MENUPICK,
-        WA_InnerWidth, 680, WA_InnerHeight, 360,
-        WINDOW_Position, WPOS_CENTERSCREEN, WINDOW_NewMenu, (ULONG)menus,
-        WINDOW_IDCMPHook, (ULONG)&P.idcmp_hook, WINDOW_IDCMPHookBits, IDCMP_INTUITICKS,
-        WINDOW_Layout, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-            LAYOUT_SpaceOuter, TRUE, LAYOUT_DeferLayout, TRUE,
-            LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-                LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-                    LAYOUT_BevelStyle, BVS_GROUP, LAYOUT_Label, (ULONG)"Printers on the network",
-                    LAYOUT_AddChild, (ULONG)P.printers,
-                    LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-                        LAYOUT_AddChild, (ULONG)P.showall,
-                        LAYOUT_AddChild, (ULONG)P.search, CHILD_WeightedWidth, 0, TAG_DONE), CHILD_WeightedHeight, 0,
-                    TAG_DONE), CHILD_WeightedWidth, 60,
-                LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-                    LAYOUT_BevelStyle, BVS_GROUP, LAYOUT_Label, (ULONG)"Selected printer", LAYOUT_SpaceInner, TRUE,
-                    LAYOUT_AddChild, (ULONG)P.details, CHILD_WeightedHeight, 0,
-                    LAYOUT_AddChild, (ULONG)P.uri, CHILD_WeightedHeight, 0,
-                    LAYOUT_AddChild, (ULONG)P.use, CHILD_WeightedHeight, 0,
-                    LAYOUT_AddChild, (ULONG)P.test, CHILD_WeightedHeight, 0,
-                    LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-                        LAYOUT_BevelStyle, BVS_SBAR_VERT, LAYOUT_Label, (ULONG)"Add a printer by address",
-                        LAYOUT_AddChild, (ULONG)P.address,
-                        LAYOUT_AddChild, (ULONG)P.check, TAG_DONE), CHILD_WeightedHeight, 0,
-                    LAYOUT_AddChild, (ULONG)NewObject(SPACE_GetClass(), NULL, TAG_DONE),
-                    TAG_DONE), CHILD_WeightedWidth, 40,
-                TAG_DONE),
-            LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-                LAYOUT_BevelStyle, BVS_GROUP, LAYOUT_Label, (ULONG)"Queue",
-                LAYOUT_AddChild, (ULONG)P.queue,
-                LAYOUT_AddChild, (ULONG)NewObject(LAYOUT_GetClass(), NULL, LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-                    LAYOUT_EvenSize, TRUE,
-                    LAYOUT_AddChild, (ULONG)P.qprint,
-                    LAYOUT_AddChild, (ULONG)P.qremove,
-                    LAYOUT_AddChild, (ULONG)P.qrefresh, TAG_DONE), CHILD_WeightedHeight, 0,
-                TAG_DONE),
-            LAYOUT_AddChild, (ULONG)P.status, CHILD_WeightedHeight, 0,
-            TAG_DONE),
-        TAG_DONE);
+    char text[ROW_MAX];
+    struct RastPort *rp = P.win->RPort;
+    columns(text, sizeof(text), widths, n, titles);
+    SetFont(rp, P.g.fixed);
+    SetAPen(rp, oap_gt_pen(&P.g, HIGHLIGHTTEXTPEN));
+    SetDrMd(rp, JAM1);
+    Move(rp, x + 4, y + P.g.fixed->tf_Baseline);
+    Text(rp, (STRPTR)text, strlen(text));
+    SetFont(rp, P.g.font);
 }
 
-static void action(ULONG id, int *done)
+static void draw_static(void)
+{
+    static const char *ptitles[] = { "Printer", "State", "PDF" };
+    static const char *qtitles[] = { "Document", "Printer", "State", "Size" };
+    OAPGT *g = &P.g;
+    Geo *G = &P.geo;
+    struct RastPort *rp = P.win->RPort;
+    int bx = P.win->BorderLeft, by = P.win->BorderTop, iw = P.win->Width - P.win->BorderLeft - P.win->BorderRight;
+    int fl = g->fixed->tf_YSize;
+    oap_gt_group(g, rp, bx + G->lx, by + G->ly, G->lw, G->lh, "Printers on the network");
+    header(bx + G->lx + OAP_GT_INSET, by + G->plv_y - fl - 2, G->pcols, 3, ptitles);
+    oap_gt_group(g, rp, bx + G->rx, by + G->ly, G->rw, G->lh, "Selected printer");
+    oap_gt_text(g, rp, bx + G->rx + OAP_GT_INSET,
+                by + G->ly + g->fh + OAP_GT_GAP + 2 * g->line_h + OAP_GT_GAP + 3 * g->gad_h + 4 + 2 * OAP_GT_GAP,
+                "Add a printer by address", TEXTPEN, G->rw - 2 * OAP_GT_INSET);
+    oap_gt_group(g, rp, bx + OAP_GT_MARGIN, by + G->qy, iw - 2 * OAP_GT_MARGIN, G->qh, "Queue");
+    header(bx + OAP_GT_MARGIN + OAP_GT_INSET, by + G->qlv_y - fl - 2, G->qcols, 4, qtitles);
+}
+
+/* Builds the gadgets for the window's size and draws everything again. */
+static void rebuild(void)
+{
+    struct Gadget *a = gad(G_ADDRESS);         /* what was typed, kept across the rebuild */
+    if (a)
+        copy(P.address, sizeof(P.address), (char *)((struct StringInfo *)a->SpecialInfo)->Buffer);
+    if (P.glist) {
+        RemoveGList(P.win, P.glist, -1);
+        P.attached = 0;
+        FreeGadgets(P.glist);
+        P.glist = NULL;
+    }
+    oap_gt_erase(P.win);
+    /* the rows follow the columns' widths for this size; with no gadgets in
+     * the window yet nothing is set on them (GadTools may only change
+     * gadgets that are in their window: Intuition loops looking otherwise) */
+    layout(P.win->Width - P.win->BorderLeft - P.win->BorderRight, P.win->Height - P.win->BorderTop - P.win->BorderBottom);
+    fill_printers();
+    fill_queue();
+    build();
+    if (!P.glist)
+        return;
+    AddGList(P.win, P.glist, ~0, -1, NULL);
+    P.attached = 1;
+    RefreshGList(P.glist, P.win, NULL, -1);
+    GT_RefreshWindow(P.win, NULL);
+    draw_static();
+}
+
+static void action(ULONG id, UWORD code, int *done)
 {
     switch (id) {
     case G_SEARCH: case M_SEARCH:
         begin_scan(NULL);
         break;
     case G_SHOWALL:
-        P.show_all = get(P.showall, GA_Selected) != 0;
+        P.show_all = (gad(G_SHOWALL)->Flags & GFLG_SELECTED) != 0;
         fill_printers();
         break;
     case G_PRINTERS:
+        P.sel_printer = code;
         show_details();
         break;
     case G_USE: case M_USE:
@@ -617,15 +731,29 @@ static void action(ULONG id, int *done)
         test_page();
         break;
     case M_ADD:
-        ActivateGadget((struct Gadget *)P.address, P.win, NULL);
+        ActivateGadget(gad(G_ADDRESS), P.win, NULL);
         break;
     case G_ADDRESS: case G_CHECK:
-        begin_scan((const char *)get(P.address, STRINGA_TextVal));
+        copy(P.address, sizeof(P.address), (char *)((struct StringInfo *)gad(G_ADDRESS)->SpecialInfo)->Buffer);
+        begin_scan(P.address);
         break;
-    case G_QUEUE:
-        set(P.qprint, GA_Disabled, selected_job() == NULL);
-        set(P.qremove, GA_Disabled, selected_job() == NULL);
+    case G_QUEUE: {
+        ULONG secs, micros;
+        CurrentTime(&secs, &micros);
+        if ((int)code == P.click_row && DoubleClick(P.click_secs, P.click_micros, secs, micros)) {
+            P.sel_job = code;
+            print_job();                     /* a double-click opens it in the Print window */
+            P.click_row = -1;
+            break;
+        }
+        P.click_row = code;
+        P.click_secs = secs;
+        P.click_micros = micros;
+        P.sel_job = code;
+        set_disabled(G_QPRINT, FALSE);
+        set_disabled(G_QREMOVE, FALSE);
         break;
+    }
     case G_QPRINT: case M_QPRINT:
         print_job();
         break;
@@ -641,7 +769,7 @@ static void action(ULONG id, int *done)
     }
 }
 
-static int key(UWORD code, int *done)
+static void key(UWORD code, int *done)
 {
     static const struct { char key; ULONG id; } keys[] = {
         { 's', G_SEARCH }, { 'u', G_USE }, { 't', G_TEST }, { 'c', G_CHECK }, { 'p', G_QPRINT }, { 'r', G_QREMOVE },
@@ -650,30 +778,25 @@ static int key(UWORD code, int *done)
     size_t i;
     if (code == 27) {
         *done = 1;
-        return 1;
+        return;
     }
     if ((code | 0x20) == 'a') {
-        set(P.showall, GA_Selected, !get(P.showall, GA_Selected));
-        action(G_SHOWALL, done);
-        return 1;
+        P.show_all = !P.show_all;
+        GT_SetGadgetAttrs(gad(G_SHOWALL), P.win, NULL, GTCB_Checked, P.show_all, TAG_DONE);
+        fill_printers();
+        return;
     }
     for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
         if ((code | 0x20) == keys[i].key) {
-            Object *o = keys[i].id == G_SEARCH ? P.search : keys[i].id == G_USE ? P.use : keys[i].id == G_TEST ? P.test
-                      : keys[i].id == G_CHECK ? P.check : keys[i].id == G_QPRINT ? P.qprint
-                      : keys[i].id == G_QREMOVE ? P.qremove : P.qrefresh;
-            if (!get(o, GA_Disabled))
-                action(keys[i].id, done);
-            return 1;
+            struct Gadget *g = gad((UWORD)keys[i].id);
+            if (g && !(g->Flags & GFLG_DISABLED))
+                action(keys[i].id, 0, done);
+            return;
         }
-    return 0;
 }
 
 static int printers_main(int argc, char **argv)
 {
-    struct Node *n;
-    ULONG sigs, result;
-    UWORD code;
     int done = 0, rc = 20;
     (void)argc;
     (void)argv;
@@ -681,96 +804,111 @@ static int printers_main(int argc, char **argv)
     memset(&P, 0, sizeof(P));
     NewList(&P.printer_rows);
     NewList(&P.queue_rows);
-    P.idcmp_hook.h_Entry = (ULONG (*)())idcmp;
+    P.sel_printer = P.sel_job = P.click_row = -1;
     copy(P.status_text, sizeof(P.status_text), "Ready");
+    copy(P.address, sizeof(P.address), "ipp://");
 
-    IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39);
-    WindowBase = OpenLibrary((STRPTR)"window.class", 44);
-    LayoutBase = OpenLibrary((STRPTR)"gadgets/layout.gadget", 44);
-    ButtonBase = OpenLibrary((STRPTR)"gadgets/button.gadget", 44);
-    StringBase = OpenLibrary((STRPTR)"gadgets/string.gadget", 44);
-    ListBrowserBase = OpenLibrary((STRPTR)"gadgets/listbrowser.gadget", 44);
-    CheckBoxBase = OpenLibrary((STRPTR)"gadgets/checkbox.gadget", 44);
-    LabelBase = OpenLibrary((STRPTR)"images/label.image", 44);
-    SpaceBase = OpenLibrary((STRPTR)"gadgets/space.gadget", 44);
-    if (!IntuitionBase || !WindowBase || !LayoutBase || !ButtonBase || !StringBase || !ListBrowserBase || !CheckBoxBase || !LabelBase || !SpaceBase)
-        goto out;
-    P.screen = LockPubScreen(NULL);
-    if (!P.screen)
+    IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 37);
+    GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 37);
+    GadToolsBase = OpenLibrary((STRPTR)"gadtools.library", 37);
+    if (!IntuitionBase || !GfxBase || !GadToolsBase || !oap_gt_open(&P.g))
         goto out;
     load_default();
     oap_printers_load(&P.known);
-    P.window = build_window();
-    if (!P.window)
-        goto out;
-    fill_printers();
-    fill_queue();
-    P.win = RA_OpenWindow(P.window);
+    natural_size();
+    if ((P.nat_w + 24 > P.g.screen->Width || P.nat_h + 40 > P.g.screen->Height) && oap_gt_fall_back(&P.g))
+        natural_size();
+    P.menu = CreateMenus(menus, TAG_DONE);
+    if (P.menu)
+        LayoutMenus(P.menu, P.g.vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
+    P.win = OpenWindowTags(NULL,
+        WA_Title, (ULONG)"OpenAmigaPrint: Printers and Queue", WA_PubScreen, (ULONG)P.g.screen,
+        WA_InnerWidth, P.nat_w, WA_InnerHeight, P.nat_h,
+        WA_Left, (P.g.screen->Width - P.nat_w) / 2, WA_Top, (P.g.screen->Height - P.nat_h) / 2,
+        WA_Activate, TRUE, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SizeGadget, TRUE,
+        WA_SizeBBottom, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE, WA_AutoAdjust, TRUE,
+        WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MENUPICK | IDCMP_VANILLAKEY |
+                  IDCMP_REFRESHWINDOW | IDCMP_NEWSIZE | IDCMP_INTUITICKS | LISTVIEWIDCMP | BUTTONIDCMP |
+                  CHECKBOXIDCMP | STRINGIDCMP | TEXTIDCMP,
+        TAG_DONE);
     if (!P.win)
         goto out;
+    WindowLimits(P.win, P.win->Width, P.win->Height, ~0, ~0);
+    if (P.menu)
+        SetMenuStrip(P.win, P.menu);
+    rebuild();
     rc = 5;
     begin_scan(NULL);
 
     while (!done) {
-        GetAttr(WINDOW_SigMask, P.window, &sigs);
-        if (Wait(sigs | SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)
+        struct IntuiMessage *im;
+        if (Wait((1UL << P.win->UserPort->mp_SigBit) | SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)
             done = 1;
-        while ((result = RA_HandleInput(P.window, &code)) != WMHI_LASTMSG) {
-            switch (result & WMHI_CLASSMASK) {
-            case WMHI_CLOSEWINDOW:
+        while (!done && (im = GT_GetIMsg(P.win->UserPort)) != NULL) {
+            ULONG class = im->Class;
+            UWORD code = im->Code;
+            struct Gadget *g = (struct Gadget *)im->IAddress;
+            GT_ReplyIMsg(im);
+            switch (class) {
+            case IDCMP_CLOSEWINDOW:
                 done = 1;
                 break;
-            case WMHI_GADGETUP:
-                action(result & WMHI_GADGETMASK, &done);
+            case IDCMP_REFRESHWINDOW:
+                GT_BeginRefresh(P.win);
+                draw_static();
+                GT_EndRefresh(P.win, TRUE);
                 break;
-            case WMHI_VANILLAKEY:
+            case IDCMP_NEWSIZE:
+                rebuild();
+                break;
+            case IDCMP_INTUITICKS:
+                if (++P.ticks >= 5) {
+                    P.ticks = 0;
+                    poll_scan();
+                    if (++P.queue_ticks >= 8) {    /* the queue: about every four seconds */
+                        P.queue_ticks = 0;
+                        fill_queue();
+                    }
+                }
+                break;
+            case IDCMP_GADGETUP:
+                action(g->GadgetID, code, &done);
+                break;
+            case IDCMP_VANILLAKEY:
                 key(code, &done);
                 break;
-            case WMHI_MENUPICK: {
-                struct Menu *strip = (struct Menu *)get(P.window, WINDOW_MenuStrip);
-                UWORD number = (UWORD)(result & WMHI_MENUMASK);
-                while (strip && number != MENUNULL) {
-                    struct MenuItem *item = ItemAddress(strip, number);
+            case IDCMP_MENUPICK: {
+                UWORD number = code;
+                while (P.menu && number != MENUNULL && !done) {
+                    struct MenuItem *item = ItemAddress(P.menu, number);
                     if (!item)
                         break;
-                    action((ULONG)GTMENUITEM_USERDATA(item), &done);
+                    action((ULONG)GTMENUITEM_USERDATA(item), 0, &done);
                     number = item->NextSelect;
                 }
                 break;
             }
             }
         }
-        if (P.poll) {
-            P.poll = 0;
-            poll_scan();
-            if (++P.queue_ticks >= 8) {            /* the queue: about every four seconds */
-                P.queue_ticks = 0;
-                fill_queue();
-            }
-        }
     }
     rc = 0;
 
 out:
-    if (P.window)
-        DisposeObject(P.window);
-    while ((n = RemHead(&P.printer_rows)))
-        FreeListBrowserNode(n);
-    while ((n = RemHead(&P.queue_rows)))
-        FreeListBrowserNode(n);
-    if (P.screen)
-        UnlockPubScreen(NULL, P.screen);
-    if (SpaceBase) CloseLibrary(SpaceBase);
-    if (LabelBase) CloseLibrary(LabelBase);
-    if (CheckBoxBase) CloseLibrary(CheckBoxBase);
-    if (ListBrowserBase) CloseLibrary(ListBrowserBase);
-    if (StringBase) CloseLibrary(StringBase);
-    if (ButtonBase) CloseLibrary(ButtonBase);
-    if (LayoutBase) CloseLibrary(LayoutBase);
-    if (WindowBase) CloseLibrary(WindowBase);
+    if (P.win) {
+        ClearMenuStrip(P.win);
+        CloseWindow(P.win);
+    }
+    if (P.glist)
+        FreeGadgets(P.glist);
+    if (P.menu)
+        FreeMenus(P.menu);
+    oap_gt_close(&P.g);
+    if (GadToolsBase) CloseLibrary(GadToolsBase);
+    if (GfxBase) CloseLibrary((struct Library *)GfxBase);
     if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
     return rc;
 }
+
 int main(int argc, char **argv)
 {
     return oap_main_with_stack(printers_main, argc, argv, 65536);
