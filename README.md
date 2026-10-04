@@ -118,7 +118,7 @@ Plain IPP is first light. IPPS will be added behind a TLS abstraction rather tha
 
 ## Licence
 
-OpenPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. Dale, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
+OpenPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. We, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
 
 The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenPrint by Dalsin Limited.
 
@@ -138,4 +138,4 @@ The classic printer-driver graphics path uses the canonical ExecBase pointer at 
 
 ## PDF printer browser
 
-The windows are GadTools (Dale, 4 October 2026: OS 3.x applications use GadTools or MUI, not ReAction), so they run on AmigaOS 3.0 and later. The `feature/pdf-printer-browser` integration adds `OAPPrinters`, an asynchronous DNS-SD discovery worker, explicit PDF capability checks, and Browse buttons in the print dialog and native viewer. Print-Job submission rechecks PDF support and validates a complete IPP response with a job identifier. See [PRINTER_BROWSER.md](docs/PRINTER_BROWSER.md) for installation, native validation status, and current protocol limits.
+The windows are GadTools (We, 4 October 2026: OS 3.x applications use GadTools or MUI, not ReAction), so they run on AmigaOS 3.0 and later. The `feature/pdf-printer-browser` integration adds `OAPPrinters`, an asynchronous DNS-SD discovery worker, explicit PDF capability checks, and Browse buttons in the print dialog and native viewer. Print-Job submission rechecks PDF support and validates a complete IPP response with a job identifier. See [PRINTER_BROWSER.md](docs/PRINTER_BROWSER.md) for installation, native validation status, and current protocol limits.
