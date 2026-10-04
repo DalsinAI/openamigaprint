@@ -1,10 +1,11 @@
-/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include <exec/types.h>
 #include <exec/resident.h>
 #include <exec/devices.h>
 #include <exec/errors.h>
 #include <exec/execbase.h>
 #include <exec/io.h>
+#include <dos/dos.h>
 #include <devices/parallel.h>
 #include <proto/exec.h>
 #include "oap_spooler.h"

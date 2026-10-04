@@ -69,6 +69,16 @@ Classic AmigaOS 3.x:
 ```sh
 ./build-amiga.sh
 ```
+## Installing with the Amiga Installer
+
+Build the programs (`./build-amiga.sh`, `./build-browser.sh`, `./build-viewer.sh`), then the package:
+
+```sh
+python3 tools/make_package.py --lha-module ~/AmigaChrome/scripts
+```
+
+`build/package/OpenAmigaPrint` is a drawer to copy to the Amiga; `build/package/OpenAmigaPrint.lha` is the same as one archive (`--lha-module` names the folder with AmigaChrome's `lha_archive.py`; without it only the drawer is made). On the Amiga, double-click **Install OpenAmigaPrint** (it runs SYS:System/Installer on OS 3.2, C:Installer elsewhere). It installs the five commands in C:, `oapspool.device` in DEVS:, the printer driver in DEVS:Printers, the spooler in WBStartup if you want it, and an OpenAmigaPrint drawer (SYS:Utilities by default) with OpenAmigaView, Printers and Queue, a test picture and a test page. The script is `package/Install-OpenAmigaPrint`.
+
 ## First-light Amiga installation
 
 Copy:
@@ -105,7 +115,11 @@ Plain IPP is first light. IPPS will be added behind a TLS abstraction rather tha
 
 ## Licence
 
-OpenAmigaPrint source is intended to be freely distributable under the BSD 2-Clause licence. The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
+OpenAmigaPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. Dale, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
+
+The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenAmigaPrint by Dalsin Limited.
+
+The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
 
 ## Queue and graphics printing
 
@@ -119,6 +133,6 @@ OpenAmigaPrint now treats completed printer jobs as durable queue entries rather
 
 The classic printer-driver graphics path uses the canonical ExecBase pointer at absolute address 4, as required by traditional Amiga printer-driver init glue. Raster transfer honours `pi_xpos` and `pi_ScaleX`, so printer.device controls rotation, centering and scaling according to the active printer preferences.
 
-## ReAction PDF printer browser
+## PDF printer browser
 
-The `feature/pdf-printer-browser` integration adds `OAPPrinters`, an asynchronous DNS-SD discovery worker, explicit PDF capability checks, and Browse buttons in the print dialog and native viewer. Print-Job submission rechecks PDF support and validates a complete IPP response with a job identifier. See [PRINTER_BROWSER.md](docs/PRINTER_BROWSER.md) for installation, native validation status, and current protocol limits.
+The windows are GadTools (Dale, 4 October 2026: OS 3.x applications use GadTools or MUI, not ReAction), so they run on AmigaOS 3.0 and later. The `feature/pdf-printer-browser` integration adds `OAPPrinters`, an asynchronous DNS-SD discovery worker, explicit PDF capability checks, and Browse buttons in the print dialog and native viewer. Print-Job submission rechecks PDF support and validates a complete IPP response with a job identifier. See [PRINTER_BROWSER.md](docs/PRINTER_BROWSER.md) for installation, native validation status, and current protocol limits.
