@@ -2,7 +2,7 @@
 
 ## Report and reproduction
 
-Dale reported that Use Printer did not update the open print window.
+We reported that Use Printer did not update the open print window.
 On Instance-23 the print dialog displayed the deliberately invalid destination
 left by the earlier safe print-worker smoke test. The persisted default was
 already the colour HP. The old polling code compared the saved URI against
