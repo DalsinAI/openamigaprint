@@ -20,6 +20,13 @@ void oav_layout_defaults(OAVLayout *s);
 int oav_place(const OAVLayout *s,unsigned long w,unsigned long h,OAVPlacement *p);
 int oav_safe_field(const char *s);
 const char *oav_format_note(const char *path);
+/* Find: where `what` is in a text or an AmigaGuide file, ignoring case
+ * (Latin-1 letters too). The search starts at `from` and goes round to the
+ * start once. A guide counts lines the way it is shown: inside a node, with
+ * @ command lines left out. 1 when found. */
+typedef struct OAVFound { long at, line, node_line; int wrapped; char node[64]; } OAVFound;
+int oav_is_guide(const char *buf,long len);
+int oav_find(const char *buf,long len,const char *what,long from,int guide,OAVFound *f);
 int oav_pdf_rgb(FILE *f,unsigned long w,unsigned long h,const OAVLayout *s,
                 OAVReadRow readrow,void *ctx,char *err,size_t errcap);
 #endif
