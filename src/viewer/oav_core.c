@@ -99,3 +99,70 @@ int oav_pdf_rgb(FILE *f,unsigned long w,unsigned long h,const OAVLayout *s,
     if(xref<0||ferror(f)||fflush(f)){fail(err,cap,"PDF finalisation failed");return 0;}
     fail(err,cap,"Saved");return 1;
 }
+/* ---- Find ---------------------------------------------------------------- */
+static int lc1(unsigned char c)
+{
+ if(c>='A'&&c<='Z')return c+32;
+ if(c>=0xc0&&c<=0xde&&c!=0xd7)return c+32;      /* Latin-1 capitals */
+ return c;
+}
+static int at_word(const char *b,long len,long i,const char *w)
+{
+ while(*w){if(i>=len||lc1((unsigned char)b[i])!=lc1((unsigned char)*w))return 0;i++;w++;}
+ return 1;
+}
+int oav_is_guide(const char *buf,long len)
+{
+ long i=0;
+ while(i<len&&(buf[i]==' '||buf[i]=='\t'||buf[i]=='\r'||buf[i]=='\n'))i++;
+ return at_word(buf,len,i,"@database");
+}
+/* A guide line that is a command (@node, @title, ...), not shown; "@{" is a link inside text. */
+static int command_line(const char *b,long len,long s)
+{
+ return s<len&&b[s]=='@'&&!(s+1<len&&b[s+1]=='{');
+}
+static int match_at(const char *b,long len,long i,const char *w,long wl)
+{
+ long k;
+ if(i+wl>len)return 0;
+ for(k=0;k<wl;k++)if(lc1((unsigned char)b[i+k])!=lc1((unsigned char)w[k]))return 0;
+ return 1;
+}
+/* Fills in the line (and for a guide the node) of the match at `at`; 0 when a
+ * guide does not show that place (a command line, or outside any node). */
+static int place(const char *b,long len,long at,int guide,OAVFound *f)
+{
+ long i,s=0,line=0,nline=0;int innode=0;
+ f->node[0]=0;
+ for(i=0;i<at;i++){
+  if(b[i]!='\n')continue;
+  if(guide){
+   if(at_word(b,len,s,"@node")){
+    long p=s+5,n=0;char end=' ';
+    while(p<len&&(b[p]==' '||b[p]=='\t'))p++;
+    if(p<len&&b[p]=='"'){end='"';p++;}
+    while(p<len&&b[p]!=end&&b[p]!='\n'&&b[p]!='\r'&&!(end==' '&&b[p]=='\t')&&n<(long)sizeof(f->node)-1)f->node[n++]=b[p++];
+    f->node[n]=0;innode=1;nline=0;
+   }else if(at_word(b,len,s,"@endnode"))innode=0;
+   else if(innode&&!command_line(b,len,s))nline++;
+  }
+  line++;s=i+1;
+ }
+ f->line=line;f->node_line=nline;
+ if(guide&&(!innode||command_line(b,len,s)||at_word(b,len,s,"@node")))return 0;
+ return 1;
+}
+int oav_find(const char *buf,long len,const char *what,long from,int guide,OAVFound *f)
+{
+ long wl=what?(long)strlen(what):0,i,pass;
+ memset(f,0,sizeof(*f));f->at=-1;
+ if(!buf||wl<=0||len<wl)return 0;
+ if(from<0||from>len)from=0;
+ for(pass=0;pass<2;pass++){
+  long a=pass?0:from,z=pass?from:len;
+  for(i=a;i<z&&i+wl<=len;i++)
+   if(match_at(buf,len,i,what,wl)&&place(buf,len,i,guide,f)){f->at=i;f->wrapped=(int)pass;return 1;}
+ }
+ return 0;
+}
