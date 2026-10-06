@@ -129,7 +129,7 @@ static struct App {
     char path[OAV_PATH_MAX], lastreq[OAV_PATH_MAX], message[256], resultbuf[2048];
     int running, refresh, page, zoom, job_active, qcount, have_white, ticks, attached, setup_on;
     /* Find: the file's text, read when first searched */
-    char *find_buf, find_what[80];
+    char *find_buf, find_what[80], find_node[64], open_node[64];   /* open_node: a guide opens at this node */
     long find_len, find_pos, find_top;      /* find_top: a line still to show once a guide node is laid out */
     int find_guide, find_wait;
 } A;
@@ -260,11 +260,11 @@ static void find_forget(void)
     A.find_buf = NULL;
     A.find_len = A.find_pos = 0;
     A.find_top = -1;
+    A.find_node[0] = 0;
 }
 
 static void close_content(void)
 {
-    find_forget();
     if (A.dto) {
         if (A.win)
             RemoveDTObject(A.win, A.dto);
@@ -278,6 +278,7 @@ static void pdf_not_shown(const char *path)
 {
     char msg[256];
     close_content();
+    find_forget();
     A.paperbox.Width = 0;
     page_setup_applies(0);
     copystr(A.path, sizeof(A.path), path);
@@ -326,7 +327,8 @@ static int load_file(const char *path)
         return 0;
     }
     status("Loading datatype...");
-    dto = NewDTObject((APTR)path, DTA_SourceType, DTST_FILE, ICA_TARGET, ICTARGET_IDCMP, PDTA_DestMode, PMODE_V43,
+    dto = NewDTObject((APTR)path, A.open_node[0] ? DTA_NodeName : TAG_IGNORE, (ULONG)A.open_node,
+                      DTA_SourceType, DTST_FILE, ICA_TARGET, ICTARGET_IDCMP, PDTA_DestMode, PMODE_V43,
                       PDTA_Screen, (ULONG)A.g.screen, PDTA_Remap, TRUE, AGA_Secure, TRUE, DTA_ControlPanel, TRUE, GA_ID, 1000, TAG_DONE);
     if (!dto) {
         LONG err = IoErr();
@@ -455,6 +457,8 @@ static int load_file(const char *path)
         }
     }
     close_content();
+    if (strcmp(A.path, path))
+        find_forget();                         /* another file: its text is read again when searched */
     A.dto = dto;
     A.group = group;
     A.natural_w = w;
@@ -731,15 +735,15 @@ static void find_show_line(long line)
     A.refresh = 1;
 }
 
-/* A guide lays a node out after DTM_GOTO returns: the line waits until the
- * node is long enough to hold it (or about five seconds). */
+/* A guide lays a node out after it opens: the line waits until the node is
+ * laid out and long enough to hold it (or about five seconds). */
 static void find_settle(void)
 {
-    ULONG total = 0;
+    ULONG total = 0, busy = 0;
     if (A.find_top < 0 || !A.dto)
         return;
-    GetDTAttrs(A.dto, DTA_TotalVert, (ULONG)&total, TAG_DONE);
-    if (total > (ULONG)A.find_top || ++A.find_wait > 50) {
+    GetDTAttrs(A.dto, DTA_TotalVert, (ULONG)&total, DTA_Busy, (ULONG)&busy, TAG_DONE);
+    if ((!busy && total > (ULONG)A.find_top) || ++A.find_wait > 50) {
         find_show_line(A.find_top);
         A.find_top = -1;
     }
@@ -760,11 +764,30 @@ static int find_next(void)
     }
     A.find_pos = fd.at + 1;
     if (A.find_guide) {
-        struct dtGoto go;
-        memset(&go, 0, sizeof(go));
-        go.MethodID = DTM_GOTO;
-        go.dtg_NodeName = (STRPTR)fd.node;
-        DoDTMethodA(A.dto, A.win, NULL, (Msg)&go);
+        /* Another node: the guide opens again at it (DTM_GOTO from here
+         * didn't move amigaguide.datatype on OS 3.2.3), the text kept. */
+        STRPTR shown = NULL;                   /* the node on screen, if the datatype says */
+        GetDTAttrs(A.dto, DTA_NodeName, (ULONG)&shown, TAG_DONE);
+        if (strcasecmp(fd.node, shown && *shown ? (const char *)shown : A.find_node[0] ? A.find_node : "main")) {
+            char *buf = A.find_buf, what[80];
+            long len = A.find_len, pos = A.find_pos;
+            int guide = A.find_guide;
+            char path[OAV_PATH_MAX];
+            copystr(what, sizeof(what), A.find_what);
+            copystr(path, sizeof(path), A.path);
+            copystr(A.open_node, sizeof(A.open_node), fd.node);
+            A.find_buf = NULL;                 /* back below: the same file's text */
+            load_file(path);
+            A.open_node[0] = 0;
+            A.find_buf = buf;
+            A.find_len = len;
+            A.find_pos = pos;
+            A.find_guide = guide;
+            copystr(A.find_what, sizeof(A.find_what), what);
+            if (!A.dto)
+                return 0;
+        }
+        copystr(A.find_node, sizeof(A.find_node), fd.node);
         A.find_top = fd.node_line;
         A.find_wait = 0;
         find_settle();
@@ -788,9 +811,16 @@ static int find_ask(void)
     struct Window *w;
     int bw = oap_gt_text_w(g, "Cancel") + 24, lw = oap_gt_text_w(g, "Find") + 8, iw = 2 * OAP_GT_MARGIN + lw + 30 * g->fixed_w;
     int gh = g->gad_h, ih = 2 * OAP_GT_MARGIN + 2 * gh + OAP_GT_GAP, done = 0, ok = 0;
+    char title[120];
+    /* The field starts empty (an OS 3 string gadget can't select the old
+     * text for typing over); Return on its own finds the last text again. */
+    if (A.find_what[0])
+        snprintf(title, sizeof(title), "Find (Return alone: \"%.40s\")", A.find_what);
+    else
+        copystr(title, sizeof(title), "Find");
     if (iw < 2 * bw + 3 * OAP_GT_MARGIN)
         iw = 2 * bw + 3 * OAP_GT_MARGIN;
-    w = OpenWindowTags(NULL, WA_Title, (ULONG)"Find", WA_PubScreen, (ULONG)g->screen, WA_InnerWidth, iw, WA_InnerHeight, ih,
+    w = OpenWindowTags(NULL, WA_Title, (ULONG)title, WA_PubScreen, (ULONG)g->screen, WA_InnerWidth, iw, WA_InnerHeight, ih,
         WA_Left, A.win->LeftEdge + (A.win->Width - iw) / 2, WA_Top, A.win->TopEdge + A.win->Height / 3,
         WA_Activate, TRUE, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SmartRefresh, TRUE, WA_AutoAdjust, TRUE,
         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_VANILLAKEY | IDCMP_REFRESHWINDOW | BUTTONIDCMP | STRINGIDCMP, TAG_DONE);
@@ -799,7 +829,7 @@ static int find_ask(void)
     p = CreateContext(&glist);
     str = p = CreateGadget(STRING_KIND, p, oap_gt_ng(g, w->BorderLeft + OAP_GT_MARGIN + lw, w->BorderTop + OAP_GT_MARGIN,
                            iw - 2 * OAP_GT_MARGIN - lw, gh, "Find", F_TEXT, PLACETEXT_LEFT, 0),
-                           GTST_String, (ULONG)A.find_what, GTST_MaxChars, sizeof(A.find_what) - 1, TAG_DONE);
+                           GTST_String, (ULONG)"", GTST_MaxChars, sizeof(A.find_what) - 1, TAG_DONE);
     p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, w->BorderLeft + OAP_GT_MARGIN, w->BorderTop + ih - OAP_GT_MARGIN - gh, bw, gh,
                      "_Find", F_FIND, PLACETEXT_IN, 0), GT_Underscore, '_', TAG_DONE);
     p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, w->BorderLeft + iw - OAP_GT_MARGIN - bw, w->BorderTop + ih - OAP_GT_MARGIN - gh, bw, gh,
@@ -842,7 +872,7 @@ static int find_ask(void)
             }
         }
     }
-    if (ok)
+    if (ok && ((struct StringInfo *)str->SpecialInfo)->Buffer[0])
         copystr(A.find_what, sizeof(A.find_what), (const char *)((struct StringInfo *)str->SpecialInfo)->Buffer);
     RemoveGList(w, glist, -1);
     CloseWindow(w);
@@ -852,16 +882,18 @@ static int find_ask(void)
 
 static int find_start(const char *what)
 {
+    char before[80];
     if (!A.dto) {
         status("Open a text or an AmigaGuide file first");
         return 0;
     }
+    copystr(before, sizeof(before), A.find_what);
     if (what)
         copystr(A.find_what, sizeof(A.find_what), what);
     else if (!find_ask())
         return 0;
-    if (A.find_buf)
-        A.find_pos = 0;
+    if (A.find_buf && strcmp(before, A.find_what))
+        A.find_pos = 0;                        /* new text: from the top; the same text goes on */
     return find_next();
 }
 
