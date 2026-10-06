@@ -57,7 +57,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *UtilityBase, *DataTypesBase, *AslBase, *GadToolsBase, *WorkbenchBase;
 struct RxsLib *RexxSysBase;
-static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.3 (4.10.2026)";
+static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.4 (6.10.2026)";
 
 #define MAX_JOBS 128
 #define REXX_NAME "OPENVIEW"
@@ -65,7 +65,7 @@ static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.3 (4.1
 enum {
     B_OPEN = 1, B_PAGE, B_FIT, B_ONE, B_MINUS, B_PLUS, B_PLAY, B_PAUSE, B_STOP, B_PREV, B_NEXT,
     B_PAPER, B_ORIENT, B_SCALE, B_EXPORT, B_PRINT, B_REFRESH, B_CANCEL, B_INFO, B_VSCROLL, B_HSCROLL,
-    B_STATUS, B_QUIT, B_PRINTDLG, B_VIEW, B_PRINTERS,
+    B_STATUS, B_QUIT, B_PRINTDLG, B_VIEW, B_PRINTERS, B_FIND, B_FINDNEXT,
     RX_SET = 200, RX_VERSION, RX_HELP, RX_JOB, RX_JOBS
 };
 
@@ -89,6 +89,9 @@ static struct NewMenu menus[] = {
     { NM_ITEM, (STRPTR)"Zoom in", (STRPTR)"+", 0, 0, (APTR)B_PLUS },
     { NM_ITEM, (STRPTR)"Zoom out", (STRPTR)"-", 0, 0, (APTR)B_MINUS },
     { NM_ITEM, (STRPTR)"As the page / as the file", (STRPTR)"L", 0, 0, (APTR)B_PAGE },
+    { NM_ITEM, NM_BARLABEL, NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Find...", (STRPTR)"G", 0, 0, (APTR)B_FIND },
+    { NM_ITEM, (STRPTR)"Find next", (STRPTR)"N", 0, 0, (APTR)B_FINDNEXT },
     { NM_TITLE, (STRPTR)"Print", NULL, 0, 0, NULL },
     { NM_ITEM, (STRPTR)"Print...", (STRPTR)"P", 0, 0, (APTR)B_PRINTDLG },
     { NM_ITEM, (STRPTR)"Printers and queue...", (STRPTR)"R", 0, 0, (APTR)B_PRINTERS },
@@ -125,6 +128,10 @@ static struct App {
     char printer_saved[384];
     char path[OAV_PATH_MAX], lastreq[OAV_PATH_MAX], message[256], resultbuf[2048];
     int running, refresh, page, zoom, job_active, qcount, have_white, ticks, attached, setup_on;
+    /* Find: the file's text, read when first searched */
+    char *find_buf, find_what[80], find_node[64], open_node[64];   /* open_node: a guide opens at this node */
+    long find_len, find_pos, find_top;      /* find_top: a line still to show once a guide node is laid out */
+    int find_guide, find_wait;
 } A;
 
 static void copystr(char *d, size_t n, const char *s)
@@ -247,6 +254,15 @@ static void draw_view(void)
     A.refresh = 1;
 }
 
+static void find_forget(void)
+{
+    free(A.find_buf);
+    A.find_buf = NULL;
+    A.find_len = A.find_pos = 0;
+    A.find_top = -1;
+    A.find_node[0] = 0;
+}
+
 static void close_content(void)
 {
     if (A.dto) {
@@ -262,6 +278,7 @@ static void pdf_not_shown(const char *path)
 {
     char msg[256];
     close_content();
+    find_forget();
     A.paperbox.Width = 0;
     page_setup_applies(0);
     copystr(A.path, sizeof(A.path), path);
@@ -310,7 +327,8 @@ static int load_file(const char *path)
         return 0;
     }
     status("Loading datatype...");
-    dto = NewDTObject((APTR)path, DTA_SourceType, DTST_FILE, ICA_TARGET, ICTARGET_IDCMP, PDTA_DestMode, PMODE_V43,
+    dto = NewDTObject((APTR)path, A.open_node[0] ? DTA_NodeName : TAG_IGNORE, (ULONG)A.open_node,
+                      DTA_SourceType, DTST_FILE, ICA_TARGET, ICTARGET_IDCMP, PDTA_DestMode, PMODE_V43,
                       PDTA_Screen, (ULONG)A.g.screen, PDTA_Remap, TRUE, AGA_Secure, TRUE, DTA_ControlPanel, TRUE, GA_ID, 1000, TAG_DONE);
     if (!dto) {
         LONG err = IoErr();
@@ -439,6 +457,8 @@ static int load_file(const char *path)
         }
     }
     close_content();
+    if (strcmp(A.path, path))
+        find_forget();                         /* another file: its text is read again when searched */
     A.dto = dto;
     A.group = group;
     A.natural_w = w;
@@ -663,6 +683,220 @@ static void poll_jobs(void)
 
 /* ---- actions (buttons, menus and ARexx alike) --------------------------------- */
 
+
+/* ---- Find, in a text or an AmigaGuide file -------------------------------- */
+
+#define FIND_LIMIT (8UL * 1024 * 1024)
+
+/* The shown file's text, read from the file itself so every text datatype
+ * (and AmigaGuide, which keeps no TDTA_Buffer) searches the same way. */
+static int find_text(void)
+{
+    FILE *f;
+    long n;
+    if (A.find_buf)
+        return 1;
+    if (!A.dto || !A.path[0] || A.group == GID_PICTURE || A.group == GID_ANIMATION || A.group == GID_SOUND || is_pdf(A.path)) {
+        status("Find works in text and AmigaGuide files");
+        return 0;
+    }
+    if (!(f = fopen(A.path, "rb"))) {
+        status("Cannot read the file to search it");
+        return 0;
+    }
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n <= 0 || (unsigned long)n > FIND_LIMIT || !(A.find_buf = malloc(n + 1))) {
+        fclose(f);
+        status(n > 0 ? "This file is too big to search (8 MB at most)" : "There is nothing in this file to search");
+        return 0;
+    }
+    A.find_len = (long)fread(A.find_buf, 1, n, f);
+    A.find_buf[A.find_len] = 0;
+    fclose(f);
+    A.find_guide = oav_is_guide(A.find_buf, A.find_len);
+    A.find_pos = 0;
+    return 1;
+}
+
+/* Shows line `line` near the top of the view, a little context above it. */
+static void find_show_line(long line)
+{
+    ULONG total = 0;
+    GetDTAttrs(A.dto, DTA_TotalVert, (ULONG)&total, TAG_DONE);
+    if (line > 2)
+        line -= 2;
+    else
+        line = 0;
+    if (total && (ULONG)line >= total)
+        line = total - 1;
+    SetDTAttrs(A.dto, A.win, NULL, DTA_TopVert, line, TAG_DONE);
+    A.refresh = 1;
+}
+
+/* A guide lays a node out after it opens: the line waits until the node is
+ * laid out and long enough to hold it (or about five seconds). */
+static void find_settle(void)
+{
+    ULONG total = 0, busy = 0;
+    if (A.find_top < 0 || !A.dto)
+        return;
+    GetDTAttrs(A.dto, DTA_TotalVert, (ULONG)&total, DTA_Busy, (ULONG)&busy, TAG_DONE);
+    if ((!busy && total > (ULONG)A.find_top) || ++A.find_wait > 50) {
+        find_show_line(A.find_top);
+        A.find_top = -1;
+    }
+}
+
+static int find_next(void)
+{
+    OAVFound fd;
+    char msg[200];
+    if (!A.find_what[0])
+        return 0;
+    if (!find_text())
+        return 0;
+    if (!oav_find(A.find_buf, A.find_len, A.find_what, A.find_pos, A.find_guide, &fd)) {
+        snprintf(msg, sizeof(msg), "\"%.60s\" is not in this file", A.find_what);
+        status(msg);
+        return 0;
+    }
+    A.find_pos = fd.at + 1;
+    if (A.find_guide) {
+        /* Another node: the guide opens again at it (DTM_GOTO from here
+         * didn't move amigaguide.datatype on OS 3.2.3), the text kept. */
+        STRPTR shown = NULL;                   /* the node on screen, if the datatype says */
+        GetDTAttrs(A.dto, DTA_NodeName, (ULONG)&shown, TAG_DONE);
+        if (strcasecmp(fd.node, shown && *shown ? (const char *)shown : A.find_node[0] ? A.find_node : "main")) {
+            char *buf = A.find_buf, what[80];
+            long len = A.find_len, pos = A.find_pos;
+            int guide = A.find_guide;
+            char path[OAV_PATH_MAX];
+            copystr(what, sizeof(what), A.find_what);
+            copystr(path, sizeof(path), A.path);
+            copystr(A.open_node, sizeof(A.open_node), fd.node);
+            A.find_buf = NULL;                 /* back below: the same file's text */
+            load_file(path);
+            A.open_node[0] = 0;
+            A.find_buf = buf;
+            A.find_len = len;
+            A.find_pos = pos;
+            A.find_guide = guide;
+            copystr(A.find_what, sizeof(A.find_what), what);
+            if (!A.dto)
+                return 0;
+        }
+        copystr(A.find_node, sizeof(A.find_node), fd.node);
+        A.find_top = fd.node_line;
+        A.find_wait = 0;
+        find_settle();
+        snprintf(msg, sizeof(msg), "Found \"%.40s\" in %.40s, line %ld%s", A.find_what, fd.node, fd.node_line + 1,
+                 fd.wrapped ? " (from the top again)" : "");
+    } else {
+        find_show_line(fd.line);
+        snprintf(msg, sizeof(msg), "Found \"%.60s\" on line %ld%s", A.find_what, fd.line + 1,
+                 fd.wrapped ? " (from the top again)" : "");
+    }
+    status(msg);
+    return 1;
+}
+
+/* A small GadTools requester: what to find. 1 when Find was pressed. */
+static int find_ask(void)
+{
+    enum { F_TEXT = 1, F_FIND, F_CANCEL };
+    OAPGT *g = &A.g;
+    struct Gadget *glist = NULL, *p, *str;
+    struct Window *w;
+    int bw = oap_gt_text_w(g, "Cancel") + 24, lw = oap_gt_text_w(g, "Find") + 8, iw = 2 * OAP_GT_MARGIN + lw + 30 * g->fixed_w;
+    int gh = g->gad_h, ih = 2 * OAP_GT_MARGIN + 2 * gh + OAP_GT_GAP, done = 0, ok = 0;
+    char title[120];
+    /* The field starts empty (an OS 3 string gadget can't select the old
+     * text for typing over); Return on its own finds the last text again. */
+    if (A.find_what[0])
+        snprintf(title, sizeof(title), "Find (Return alone: \"%.40s\")", A.find_what);
+    else
+        copystr(title, sizeof(title), "Find");
+    if (iw < 2 * bw + 3 * OAP_GT_MARGIN)
+        iw = 2 * bw + 3 * OAP_GT_MARGIN;
+    w = OpenWindowTags(NULL, WA_Title, (ULONG)title, WA_PubScreen, (ULONG)g->screen, WA_InnerWidth, iw, WA_InnerHeight, ih,
+        WA_Left, A.win->LeftEdge + (A.win->Width - iw) / 2, WA_Top, A.win->TopEdge + A.win->Height / 3,
+        WA_Activate, TRUE, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SmartRefresh, TRUE, WA_AutoAdjust, TRUE,
+        WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_VANILLAKEY | IDCMP_REFRESHWINDOW | BUTTONIDCMP | STRINGIDCMP, TAG_DONE);
+    if (!w)
+        return 0;
+    p = CreateContext(&glist);
+    str = p = CreateGadget(STRING_KIND, p, oap_gt_ng(g, w->BorderLeft + OAP_GT_MARGIN + lw, w->BorderTop + OAP_GT_MARGIN,
+                           iw - 2 * OAP_GT_MARGIN - lw, gh, "Find", F_TEXT, PLACETEXT_LEFT, 0),
+                           GTST_String, (ULONG)"", GTST_MaxChars, sizeof(A.find_what) - 1, TAG_DONE);
+    p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, w->BorderLeft + OAP_GT_MARGIN, w->BorderTop + ih - OAP_GT_MARGIN - gh, bw, gh,
+                     "_Find", F_FIND, PLACETEXT_IN, 0), GT_Underscore, '_', TAG_DONE);
+    p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, w->BorderLeft + iw - OAP_GT_MARGIN - bw, w->BorderTop + ih - OAP_GT_MARGIN - gh, bw, gh,
+                     "_Cancel", F_CANCEL, PLACETEXT_IN, 0), GT_Underscore, '_', TAG_DONE);
+    if (!p) {
+        CloseWindow(w);
+        FreeGadgets(glist);
+        status("Not enough memory for the Find requester");
+        return 0;
+    }
+    AddGList(w, glist, (UWORD)-1, -1, NULL);
+    RefreshGList(glist, w, NULL, -1);
+    GT_RefreshWindow(w, NULL);
+    ActivateGadget(str, w, NULL);
+    while (!done) {
+        struct IntuiMessage *im;
+        WaitPort(w->UserPort);
+        while (!done && (im = GT_GetIMsg(w->UserPort)) != NULL) {
+            ULONG class = im->Class;
+            UWORD code = im->Code;
+            struct Gadget *gg = (struct Gadget *)im->IAddress;
+            GT_ReplyIMsg(im);
+            if (class == IDCMP_CLOSEWINDOW)
+                done = 1;
+            else if (class == IDCMP_REFRESHWINDOW) {
+                GT_BeginRefresh(w);
+                GT_EndRefresh(w, TRUE);
+            } else if (class == IDCMP_GADGETUP) {
+                if (gg->GadgetID == F_CANCEL)
+                    done = 1;
+                else if (gg->GadgetID == F_FIND || (gg->GadgetID == F_TEXT && code != 9))   /* Return, not Tab */
+                    done = ok = 1;
+            } else if (class == IDCMP_VANILLAKEY) {
+                if (code == 27 || (code | 0x20) == 'c')
+                    done = 1;
+                else if (code == 13 || (code | 0x20) == 'f')
+                    done = ok = 1;
+                else
+                    ActivateGadget(str, w, NULL);
+            }
+        }
+    }
+    if (ok && ((struct StringInfo *)str->SpecialInfo)->Buffer[0])
+        copystr(A.find_what, sizeof(A.find_what), (const char *)((struct StringInfo *)str->SpecialInfo)->Buffer);
+    RemoveGList(w, glist, -1);
+    CloseWindow(w);
+    FreeGadgets(glist);
+    return ok && A.find_what[0];
+}
+
+static int find_start(const char *what)
+{
+    char before[80];
+    if (!A.dto) {
+        status("Open a text or an AmigaGuide file first");
+        return 0;
+    }
+    copystr(before, sizeof(before), A.find_what);
+    if (what)
+        copystr(A.find_what, sizeof(A.find_what), what);
+    else if (!find_ask())
+        return 0;
+    if (A.find_buf && strcmp(before, A.find_what))
+        A.find_pos = 0;                        /* new text: from the top; the same text goes on */
+    return find_next();
+}
+
 static int action(int id, const char *arg)
 {
     char path[OAV_PATH_MAX];
@@ -724,6 +958,8 @@ static int action(int id, const char *arg)
     case B_PREV: return do_trigger(STM_BROWSE_PREV);
     case B_NEXT: return do_trigger(STM_BROWSE_NEXT);
     case B_INFO: status(oav_format_note(A.path)); return 1;
+    case B_FIND: return find_start(arg);
+    case B_FINDNEXT: return A.find_what[0] ? find_next() : find_start(NULL);
     case B_QUIT: A.running = 0; return 1;
     default: return 0;
     }
@@ -785,7 +1021,7 @@ static const struct { const char *name; int id; int args; } rexx_commands[] = {
     { "STOP", B_STOP, 0 }, { "NEXT", B_NEXT, 0 }, { "PREVIOUS", B_PREV, 0 }, { "FIT", B_FIT, 0 },
     { "ACTUAL", B_ONE, 0 }, { "PAGE", B_PAGE, 0 }, { "PAPER", B_PAPER, 0 }, { "ORIENTATION", B_ORIENT, 0 },
     { "SCALE", B_SCALE, 0 }, { "JOB", RX_JOB, 0 }, { "JOBS", RX_JOBS, 0 }, { "CANCEL", B_CANCEL, 0 },
-    { "REFRESH", B_REFRESH, 0 }, { "QUIT", B_QUIT, 0 }
+    { "REFRESH", B_REFRESH, 0 }, { "QUIT", B_QUIT, 0 }, { "FIND", B_FIND, 1 }, { "FINDNEXT", B_FINDNEXT, 0 }
 };
 
 /* The next word of an ARexx command line, quotes allowed; `rest` takes
@@ -848,7 +1084,7 @@ static int rexx_command(const char *line, const char **result)
         break;
     case RX_HELP:
         copystr(A.resultbuf, sizeof(A.resultbuf), "OPEN FILE | SET KEY VALUE | PRINT | SAVEPDF FILE | PLAY | PAUSE | STOP | NEXT | PREVIOUS | "
-                "FIT | ACTUAL | PAGE | PAPER | ORIENTATION | SCALE | JOB | CANCEL | JOBS | REFRESH | QUIT");
+                "FIT | ACTUAL | PAGE | PAPER | ORIENTATION | SCALE | FIND TEXT | FINDNEXT | JOB | CANCEL | JOBS | REFRESH | QUIT");
         break;
     case RX_JOB: {
         char st[32], msg[256];
@@ -1117,8 +1353,10 @@ static void handle_window(void)
             break;
         case IDCMP_IDCMPUPDATE:                /* the datatype changed what it shows */
             A.refresh = 1;
+            find_settle();
             break;
         case IDCMP_INTUITICKS:
+            find_settle();
             if (++A.ticks >= 10) {
                 A.ticks = 0;
                 poll_jobs();
@@ -1174,6 +1412,8 @@ static void handle_window(void)
             case 'a': if (A.setup_on) action(B_PAPER, NULL); break;
             case 't': if (A.setup_on) action(B_ORIENT, NULL); break;
             case 'z': if (A.setup_on) action(B_SCALE, NULL); break;
+            case 'f': case '/': action(B_FIND, NULL); break;
+            case 'n': action(B_FINDNEXT, NULL); break;
             }
             break;
         }
@@ -1189,6 +1429,7 @@ static int viewer_main(int argc, char **argv)
     memset(&A, 0, sizeof(A));
     oav_layout_defaults(&A.settings);
     A.page = 1;
+    A.find_top = -1;
     copystr(A.message, sizeof(A.message), "Open a picture or a PDF, or drop one on this window");
     if (!libraries()) {
         fputs("OpenView: needs AmigaOS 3.0 or later (datatypes, GadTools)\n", stderr);
