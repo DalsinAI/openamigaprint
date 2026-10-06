@@ -139,3 +139,7 @@ The classic printer-driver graphics path uses the canonical ExecBase pointer at 
 ## PDF printer browser
 
 The windows are GadTools (We, 4 October 2026: OS 3.x applications use GadTools or MUI, not ReAction), so they run on AmigaOS 3.0 and later. The `feature/pdf-printer-browser` integration adds `OAPPrinters`, an asynchronous DNS-SD discovery worker, explicit PDF capability checks, and Browse buttons in the print dialog and native viewer. Print-Job submission rechecks PDF support and validates a complete IPP response with a job identifier. See [PRINTER_BROWSER.md](docs/PRINTER_BROWSER.md) for installation, native validation status, and current protocol limits.
+
+## Contributors
+
+OpenPrint is created and maintained by [SacredTrees](https://github.com/SacredTrees) with the AmigaChrome agent team, copyright Dalsin Limited. Everyone whose work it includes is credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
