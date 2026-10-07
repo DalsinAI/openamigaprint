@@ -84,7 +84,7 @@ until its printer outcome is checked.
 - make test test-discovery test-submit
 - Submission tests use mocked sockets, never a physical printer.
 - ASan/UBSan run on the host transport test.
-- Compiler stack reports are in docs/evidence/print-stack-before.txt and
+- Compiler stack reports are in docs/history/evidence/print-stack-before.txt and
   print-stack-after.txt.
 - OAVRequestSmoke runs on the guest, checks request versions and options, then
   launches a real separate worker with a deliberately invalid destination.
