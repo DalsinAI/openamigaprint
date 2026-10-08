@@ -4,7 +4,7 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 CC=${AMIGA_CC:-$(command -v m68k-amigaos-gcc || echo m68k-amigaos-gcc)}   # set AMIGA_CC, or have it on PATH
 OUT="$ROOT/build/amigaos3"
 mkdir -p "$OUT"
-FLAGS='-m68000 -fno-common -O2 -Wall -Wextra -Werror -Wno-pointer-sign -Wno-misleading-indentation -noixemul'
+FLAGS='-m68000 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -Wno-pointer-sign -Wno-misleading-indentation -noixemul'
 "$CC" $FLAGS -I"$ROOT/include" -o "$OUT/OpenView" \
  "$ROOT/src/amiga/printer_selection.c" "$ROOT/src/amiga/selection_events.c" "$ROOT/src/viewer/oav_main.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/ui/oap_gt.c" "$ROOT/src/amiga/oap_stack.c" -lamiga
 "$CC" $FLAGS -I"$ROOT/include" -o "$OUT/OAVWorker" \
