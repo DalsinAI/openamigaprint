@@ -718,10 +718,13 @@ static void action(ULONG id, UWORD code, int *done)
     case G_SEARCH: case M_SEARCH:
         begin_scan(NULL);
         break;
-    case G_SHOWALL:
-        P.show_all = (gad(G_SHOWALL)->Flags & GFLG_SELECTED) != 0;
+    case G_SHOWALL: {
+        struct Gadget *g = gad(G_SHOWALL);   /* NULL while the gadgets are detached */
+        if (g)
+            P.show_all = (g->Flags & GFLG_SELECTED) != 0;
         fill_printers();
         break;
+    }
     case G_PRINTERS:
         P.sel_printer = code;
         show_details();
@@ -732,13 +735,20 @@ static void action(ULONG id, UWORD code, int *done)
     case G_TEST: case M_TEST:
         test_page();
         break;
-    case M_ADD:
-        ActivateGadget(gad(G_ADDRESS), P.win, NULL);
+    case M_ADD: {
+        struct Gadget *g = gad(G_ADDRESS);
+        if (g)
+            ActivateGadget(g, P.win, NULL);
         break;
-    case G_ADDRESS: case G_CHECK:
-        copy(P.address, sizeof(P.address), (char *)((struct StringInfo *)gad(G_ADDRESS)->SpecialInfo)->Buffer);
+    }
+    case G_ADDRESS: case G_CHECK: {
+        struct Gadget *g = gad(G_ADDRESS);
+        if (!g)
+            break;                           /* detached: there is no address to read */
+        copy(P.address, sizeof(P.address), (char *)((struct StringInfo *)g->SpecialInfo)->Buffer);
         begin_scan(P.address);
         break;
+    }
     case G_QUEUE: {
         ULONG secs, micros;
         CurrentTime(&secs, &micros);
