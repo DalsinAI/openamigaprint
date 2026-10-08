@@ -17,6 +17,7 @@
 #include "oap_selection.h"
 #include "oap_printers.h"
 #include "oap_stack.h"
+#include "oap_str.h"
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <exec/ports.h>
@@ -134,13 +135,7 @@ static struct App {
     int find_guide, find_wait;
 } A;
 
-static void copystr(char *d, size_t n, const char *s)
-{
-    if (n) {
-        strncpy(d, s ? s : "", n - 1);
-        d[n - 1] = 0;
-    }
-}
+#define copystr oap_copy
 
 static int is_pdf(const char *path)
 {
@@ -332,7 +327,7 @@ static int load_file(const char *path)
                       PDTA_Screen, (ULONG)A.g.screen, PDTA_Remap, TRUE, AGA_Secure, TRUE, DTA_ControlPanel, TRUE, GA_ID, 1000, TAG_DONE);
     if (!dto) {
         LONG err = IoErr();
-        const char *name = FilePart((STRPTR)path);
+        const char *name = (const char *)FilePart((STRPTR)path);
         if (is_pdf(path)) {
             pdf_not_shown(path);
             return 1;

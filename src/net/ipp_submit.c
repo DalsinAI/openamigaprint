@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include "oap.h"
-#include "oap_discovery.h"
+#include "oap_net.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -10,7 +10,7 @@ typedef struct SendWorkspace {
     OAPCaps capabilities, reply;
     OAPJobOptions effective;
     unsigned char prefix[2048], chunk[8192];
-    char header[1024], note[256];
+    char note[256];
 } SendWorkspace;
 
 static int progress(OAPSendProgress fn, void *ctx, const char *stage,
@@ -27,9 +27,10 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
     FILE *f = NULL;
     unsigned char *body = NULL;
     size_t plen = 0, bn = 0, n;
-    long flen = 0, hn;
+    long flen = 0;
     unsigned long uploaded = 0;
-    int fd = -1, result = OAP_SEND_ERROR, attempted = 0;
+    OAPConn *conn = NULL;
+    int result = OAP_SEND_ERROR, attempted = 0;
     if (!pdf || !o || !status || !cap) return OAP_SEND_ERROR;
     status[0] = 0;
     s = calloc(1, sizeof(*s));
@@ -62,24 +63,18 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
         snprintf(status, cap, "Cannot encode IPP print job"); goto done;
     }
     if (!progress(notify, ctx, "connecting", 0, (unsigned long)flen)) goto cancelled;
-    fd = oap_net_connect(s->uri.host, s->uri.port);
-    if (fd < 0) { snprintf(status, cap, "Printer connection failed"); goto done; }
-    hn = snprintf(s->header, sizeof(s->header),
-        "POST %s HTTP/1.1\r\nHost: %s:%u\r\nContent-Type: application/ipp\r\n"
-        "Content-Length: %lu\r\nConnection: close\r\nUser-Agent: OpenPrint/0.2\r\n\r\n",
-        s->uri.path, s->uri.host, (unsigned)s->uri.port, (unsigned long)(plen + flen));
-    if (hn < 0 || hn >= (long)sizeof(s->header)) {
-        snprintf(status, cap, "IPP request header too large"); goto done;
-    }
+    conn = oap_conn_open(&s->uri, s->note, sizeof(s->note));
+    if (!conn) { snprintf(status, cap, "%s", s->note); goto done; }
     if (!progress(notify, ctx, "uploading", 0, (unsigned long)flen)) goto cancelled;
     /* Once transmission starts, a lost reply must never become an automatic retry. */
     attempted = 1;
-    if (!oap_net_write(fd, s->header, (size_t)hn) || !oap_net_write(fd, s->prefix, plen)) {
+    if (!oap_http_post(conn, &s->uri, (unsigned long)(plen + flen)) ||
+        !oap_conn_write(conn, s->prefix, plen, 5)) {
         snprintf(status, cap, "Submission uncertain: IPP request write failed"); goto done;
     }
     while ((n = fread(s->chunk, 1, sizeof(s->chunk), f)) != 0) {
         if (!progress(notify, ctx, "uploading", uploaded, (unsigned long)flen)) goto cancelled;
-        if (!oap_net_write(fd, s->chunk, n)) {
+        if (!oap_conn_write(conn, s->chunk, n, 5)) {
             snprintf(status, cap, "Submission uncertain: PDF upload interrupted; check printer"); goto done;
         }
         uploaded += (unsigned long)n;
@@ -91,7 +86,8 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
     body = malloc(OAP_BODY_MAX);
     if (!body) { snprintf(status, cap, "Submission uncertain: cannot allocate response buffer"); goto done; }
     s->note[0] = 0;
-    if (!oap_receive_ipp(fd, body, OAP_BODY_MAX, &bn, s->note, sizeof(s->note))) {
+    /* A printer may take a while to answer a whole document: longer than a query. */
+    if (!oap_receive_ipp(conn, body, OAP_BODY_MAX, &bn, 20, s->note, sizeof(s->note))) {
         snprintf(status, cap, "Submission uncertain: %.170s", s->note); goto done;
     }
     if (!oap_ipp_parse_caps(body, bn, 1, &s->reply) || !s->reply.job_id) {
@@ -107,15 +103,10 @@ cancelled:
                                    : "Cancelled before sending a print job");
 done:
     if (attempted && result == OAP_SEND_ERROR) result = OAP_SEND_UNCERTAIN;
-    if (fd >= 0) oap_net_close(fd);
+    oap_conn_close(conn);
     oap_net_stop();
     free(body);
     if (f) fclose(f);
     free(s);
     return result;
-}
-
-int oap_ipp_submit_pdf(const char *pdf, const OAPJobOptions *o, char *status, size_t cap)
-{
-    return oap_ipp_submit_pdf_ex(pdf, o, status, cap, NULL, NULL) == OAP_SEND_ACCEPTED;
 }

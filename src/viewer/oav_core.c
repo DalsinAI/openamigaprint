@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include "oav_core.h"
+#include "oap_str.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -42,7 +43,8 @@ int oav_parse_points(const char *s,long *cpt)
  while(*s>='0'&&*s<='9'){whole=whole*10+(unsigned long)(*s++-'0');if(whole>144)return 0;n++;}
  if(!n)return 0;
  if(*s=='.'){s++;if(*s<'0'||*s>'9')return 0;frac=(unsigned long)(*s++-'0')*10;if(*s>='0'&&*s<='9')frac+=(unsigned long)(*s++-'0');}
- if(*s||whole*100+frac>14400)return 0;*cpt=(long)(whole*100+frac);return 1;
+ if(*s||whole*100+frac>14400)return 0;
+ *cpt=(long)(whole*100+frac);return 1;
 }
 int oav_place(const OAVLayout *s,unsigned long w,unsigned long h,OAVPlacement *p)
 {
@@ -65,7 +67,7 @@ static void point_string(char *out,long v)
  unsigned long a=(unsigned long)(v<0?-v:v);
  sprintf(out,"%s%lu.%02lu",v<0?"-":"",a/100,a%100);
 }
-static void fail(char *e,size_t n,const char *s){if(n){strncpy(e,s,n-1);e[n-1]=0;}}
+static void fail(char *e,size_t n,const char *s){oap_copy(e,n,s);}
 int oav_pdf_rgb(FILE *f,unsigned long w,unsigned long h,const OAVLayout *s,
                OAVReadRow readrow,void *ctx,char *err,size_t cap)
 {

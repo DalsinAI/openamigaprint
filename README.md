@@ -71,6 +71,8 @@ Classic AmigaOS 3.x:
 ```sh
 ./build-amiga.sh
 ```
+
+Every 68k compile has `-Wall -Wextra -Werror`. `scripts/build-compilers.sh` builds every program with the os32 GCC 6.5 stove and the os32 GCC 16 stove (`OS32_GCC65`, `OS32_GCC16`) into `build/gcc65` and `build/gcc16`, and fails on any diagnostic from either. `AMIGA_CC` and `OAP_OUT` choose the compiler and the output folder of the three build scripts.
 ## Installing with the Amiga Installer
 
 Build the programs (`./build-amiga.sh`, `./build-browser.sh`, `./build-viewer.sh`), then the package:
