@@ -10,14 +10,9 @@
 #include <proto/dos.h>
 #include <stdio.h>
 #include <string.h>
+#include "oap_str.h"
 
-static void copy(char *dst, size_t cap, const char *src)
-{
-    if (!cap)
-        return;
-    strncpy(dst, src ? src : "", cap - 1);
-    dst[cap - 1] = 0;
-}
+#define copy oap_copy
 
 int oap_printer_is_file(const OAPPrinter *p)
 {

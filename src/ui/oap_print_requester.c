@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "oap_str.h"
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -86,13 +87,7 @@ static struct PrintRequester {
     int busy, sent, percent, finished, ticks;
 } R;
 
-static void copy(char *dst, size_t cap, const char *src)
-{
-    if (!cap)
-        return;
-    strncpy(dst, src ? src : "", cap - 1);
-    dst[cap - 1] = 0;
-}
+#define copy oap_copy
 
 static long file_size(const char *path)
 {
@@ -112,7 +107,7 @@ static long file_size(const char *path)
 
 static const char *base_name(const char *path)
 {
-    const char *p = FilePart((STRPTR)path);
+    const char *p = (const char *)FilePart((STRPTR)path);
     return p && *p ? p : path;
 }
 
@@ -539,7 +534,7 @@ static int copy_file(const char *from, const char *to)
 static void save_pdf(void)
 {
     struct FileRequester *fr;
-    char path[512], text[256];
+    char path[512], text[sizeof(path) + 80];
     fr = (struct FileRequester *)AllocAslRequestTags(ASL_FileRequest, ASLFR_TitleText, (ULONG)"Save as PDF",
                                                        ASLFR_DoSaveMode, TRUE, ASLFR_InitialFile, (ULONG)base_name(R.pdf),
                                                        ASLFR_InitialPattern, (ULONG)"#?.pdf", ASLFR_DoPatterns, TRUE, TAG_END);
@@ -548,7 +543,7 @@ static void save_pdf(void)
         return;
     }
     if (AslRequestTags(fr, ASLFR_Window, (ULONG)R.win, ASLFR_SleepWindow, TRUE, TAG_END)) {
-        copy(path, sizeof(path), fr->fr_Drawer);
+        copy(path, sizeof(path), (const char *)fr->fr_Drawer);
         AddPart((STRPTR)path, fr->fr_File, sizeof(path));
         if (copy_file(R.pdf, path)) {
             snprintf(text, sizeof(text), "Saved %s", path);
@@ -763,7 +758,7 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
         struct IntuiMessage *im;
         Wait((1UL << R.win->UserPort->mp_SigBit) | oap_selection_mask(&selection) | SIGBREAKF_CTRL_C);
         if (oap_selection_receive(&selection, picked, sizeof(picked)) && !R.busy) {
-            char text[200];
+            char text[sizeof(picked) + 32];
             fill_printers(picked);
             rebuild();
             snprintf(text, sizeof(text), "Printer chosen: %s", chosen() ? chosen()->name : picked);

@@ -1,3 +1,4 @@
+/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include "oap.h"
 #include <string.h>
 #include <stdlib.h>
@@ -10,19 +11,42 @@ static int attr(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,cons
 static int attr_s(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,const char*v){return attr(b,c,p,tag,n,v,strlen(v));}
 static int attr_i(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,unsigned long v){unsigned char q[4];q[0]=v>>24;q[1]=v>>16;q[2]=v>>8;q[3]=v;return attr(b,c,p,tag,n,q,4);}
 
+/* ipp://host[:port][/path]. The host is a name or a dotted address (no
+ * user, no IPv6 literal); the port defaults to 631 and the path to
+ * /ipp/print, the IPP Everywhere resource. One parser for the query and
+ * the print job, so both always reach the same resource. */
 int oap_parse_ipp_uri(const char *uri,OAPUri *out)
 {
-    const char *p,*slash,*colon; size_t hn;
+    const char *host,*end,*slash,*colon,*q;
+    size_t n;
     if(!uri||!out||strncmp(uri,"ipp://",6)!=0)return 0;
-    memset(out,0,sizeof(*out)); out->port=631; p=uri+6; slash=strchr(p,'/');
-    if(!slash)slash=p+strlen(p);
-    colon=NULL;
-    { const char *q; for(q=p;q<slash;q++) if(*q==':') colon=q; }
-    hn=(size_t)((colon?colon:slash)-p); if(!hn||hn>=sizeof(out->host))return 0;
-    memcpy(out->host,p,hn); out->host[hn]=0;
-    if(colon){ long v=strtol(colon+1,NULL,10); if(v<1||v>65535)return 0; out->port=(unsigned short)v; }
-    if(*slash) { if(strlen(slash)>=sizeof(out->path))return 0; strcpy(out->path,slash); }
-    else strcpy(out->path,"/ipp/print");
+    memset(out,0,sizeof(*out));
+    out->port=631;
+    host=uri+6;
+    slash=strchr(host,'/');
+    end=slash?slash:host+strlen(host);
+    colon=memchr(host,':',(size_t)(end-host));
+    n=(size_t)((colon?colon:end)-host);
+    if(!n||n>=sizeof(out->host))return 0;
+    for(q=host;q<host+n;q++)
+        if((unsigned char)*q<=32||(unsigned char)*q>=127||*q=='@'||*q=='['||*q==']'||*q=='\\')return 0;
+    memcpy(out->host,host,n);
+    if(colon){
+        unsigned long v=0;
+        if(colon+1==end)return 0;
+        for(q=colon+1;q<end;q++){
+            if(*q<'0'||*q>'9'||v>6553)return 0;
+            v=v*10+(unsigned long)(*q-'0');
+        }
+        if(!v||v>65535)return 0;
+        out->port=(unsigned short)v;
+    }
+    if(!slash)slash="/ipp/print";
+    n=strlen(slash);
+    if(n>=sizeof(out->path))return 0;
+    for(q=slash;*q;q++)
+        if((unsigned char)*q<=32||(unsigned char)*q>=127||*q=='#')return 0;
+    memcpy(out->path,slash,n+1);
     return 1;
 }
 int oap_ipp_build_prefix(const OAPJobOptions *o,unsigned char *b,size_t c,size_t *out)

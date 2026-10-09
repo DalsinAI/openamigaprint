@@ -185,8 +185,13 @@ void oap_gt_erase(struct Window *win)
 
 struct Gadget *oap_gt_find(struct Gadget *list, UWORD id)
 {
+    /* The last with the ID: a GadTools kind made of several gadgets (a
+     * list view: its list, scroller and arrows) gives each the ID, and the
+     * one CreateGadget answered, which GT_SetGadgetAttrs needs, comes last.
+     * The first was the list view's inner part, so new labels never showed. */
+    struct Gadget *found = NULL;
     for (; list; list = list->NextGadget)
         if (list->GadgetID == id)
-            return list;
-    return NULL;
+            found = list;
+    return found;
 }

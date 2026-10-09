@@ -16,5 +16,7 @@ int oap_http_response(const unsigned char *p,size_t n,int eof,unsigned char *bod
  *status=st;if(st<200||st>=300)return -1;if(!ct||(have_cl&&chunked))return -1;
  if(chunked){size_t used=0;for(;;){size_t size,semi;e=line_end(p,n,x);if(e==n)return eof?-1:0;semi=x;while(semi<e&&p[semi]!=';')semi++;if(!number(p+x,semi-x,&size,16)||size>cap-used)return -1;x=e+2;if(!size){unsigned trailers=0;for(;;){e=line_end(p,n,x);if(e==n)return eof?-1:0;if(e==x){*len=used;return 1;}if(++trailers>64)return -1;x=e+2;}}if(n-x<size+2)return eof?-1:0;if(p[x+size]!='\r'||p[x+size+1]!='\n')return -1;memcpy(body+used,p+x,size);used+=size;x+=size+2;}}
  if(have_cl){if(n-x<cl)return eof?-1:0;memcpy(body,p+x,cl);*len=cl;return 1;}
- if(!eof)return 0;if(n-x>cap)return -1;memcpy(body,p+x,n-x);*len=n-x;return 1;
+ if(!eof)return 0;
+ if(n-x>cap)return -1;
+ memcpy(body,p+x,n-x);*len=n-x;return 1;
  }}
