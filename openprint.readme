@@ -3,12 +3,16 @@ Uploader:     (We fill this in at upload time)
 Author:       Dalsin Limited
 Type:         text/print
 Version:      0.3
-Requires:     bsdsocket.library (OpenSocket, Roadshow, AmiTCP or Miami)
+Requires:     bsdsocket.library (OpenSocket, Roadshow, AmiTCP or Miami);
+              for IPPS, opentls.library or AmiSSL 5
 Architecture: m68k-amigaos >= 3.2.0
 Distribution: Aminet
 
 OpenPrint prints from AmigaOS to the printers on your network that take PDF
 documents over IPP, and saves documents as PDF files on the Amiga.
+
+- IPPS (encrypted IPP) through opentls.library or AmiSSL 5: a printer's own
+  certificate is trusted once, by asking, and remembered by its fingerprint.
 
 - OpenPrint: one Print window for any document, with printer, copies, range,
   paper and orientation.

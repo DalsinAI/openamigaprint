@@ -11,18 +11,25 @@ static int attr(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,cons
 static int attr_s(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,const char*v){return attr(b,c,p,tag,n,v,strlen(v));}
 static int attr_i(unsigned char*b,size_t c,size_t*p,unsigned tag,const char*n,unsigned long v){unsigned char q[4];q[0]=v>>24;q[1]=v>>16;q[2]=v>>8;q[3]=v;return attr(b,c,p,tag,n,q,4);}
 
-/* ipp://host[:port][/path]. The host is a name or a dotted address (no
- * user, no IPv6 literal); the port defaults to 631 and the path to
- * /ipp/print, the IPP Everywhere resource. One parser for the query and
- * the print job, so both always reach the same resource. */
+/* ipp://host[:port][/path] or ipps://host[:port][/path] (IPP over TLS).
+ * The host is a name or a dotted address (no user, no IPv6 literal); the
+ * port defaults to 631 for both (RFC 8010: IPPS is TLS on IPP's own
+ * port) and the path to /ipp/print, the IPP Everywhere resource. One
+ * parser for the query and the print job, so both always reach the same
+ * resource. */
 int oap_parse_ipp_uri(const char *uri,OAPUri *out)
 {
     const char *host,*end,*slash,*colon,*q;
     size_t n;
-    if(!uri||!out||strncmp(uri,"ipp://",6)!=0)return 0;
+    int secure;
+    if(!uri||!out)return 0;
+    if(!strncmp(uri,"ipp://",6))secure=0;
+    else if(!strncmp(uri,"ipps://",7))secure=1;
+    else return 0;
     memset(out,0,sizeof(*out));
     out->port=631;
-    host=uri+6;
+    out->secure=secure;
+    host=uri+6+secure;
     slash=strchr(host,'/');
     end=slash?slash:host+strlen(host);
     colon=memchr(host,':',(size_t)(end-host));

@@ -20,3 +20,51 @@ int oap_http_response(const unsigned char *p,size_t n,int eof,unsigned char *bod
  if(n-x>cap)return -1;
  memcpy(body,p+x,n-x);*len=n-x;return 1;
  }}
+
+/* The value of header `name` in the final (not 1xx) response in p[0..n),
+ * as text; 1 when found. For WWW-Authenticate after a 401. */
+int oap_http_header(const unsigned char *p, size_t n, const char *name, char *out, size_t cap)
+{
+    size_t start = 0, nl = strlen(name);
+    if (!cap)
+        return 0;
+    out[0] = 0;
+    for (;;) {
+        size_t e = line_end(p, n, start), x;
+        int informational;
+        if (e == n || e - start < 12 || memcmp(p + start, "HTTP/1.", 7))
+            return 0;
+        informational = p[start + 9] == '1';
+        x = e + 2;
+        for (;;) {
+            size_t colon, v, ve;
+            e = line_end(p, n, x);
+            if (e == n)
+                return 0;
+            if (e == x) {
+                x += 2;
+                break;
+            }
+            colon = x;
+            while (colon < e && p[colon] != ':')
+                colon++;
+            if (!informational && colon < e && equals(p + x, colon - x, name) && colon - x == nl) {
+                size_t k = 0;
+                v = colon + 1;
+                while (v < e && (p[v] == ' ' || p[v] == '\t'))
+                    v++;
+                ve = e;
+                while (ve > v && (p[ve - 1] == ' ' || p[ve - 1] == '\t'))
+                    ve--;
+                for (; v < ve && k + 1 < cap; v++)
+                    out[k++] = p[v] < 32 ? ' ' : (char)p[v];
+                out[k] = 0;
+                return 1;
+            }
+            x = e + 2;
+        }
+        if (!informational)
+            return 0;
+        start = x;
+    }
+}

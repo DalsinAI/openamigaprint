@@ -4,7 +4,9 @@
  * contract of src/amiga/ui.c, oap_run_print_dialog(), and the 3 October
  * review's design:
  *   - the printer is chosen by name from one list that also offers
- *     "Save as PDF file"; only printers verified to take PDF are offered;
+ *     "Save as PDF file"; only printers verified to take PDF are offered,
+ *     and an ipps:// printer only once its certificate was accepted
+ *     (trusting one is Printers and Queue's job: Find printers...);
  *   - copies, pages, paper, layout, sides and colour are labelled gadgets;
  *   - the preview is drawn to the paper's real shape;
  *   - progress shows in a status line and a bar;
@@ -201,7 +203,7 @@ static void fill_printers(const char *uri)
     R.row = 0;
     for (i = 0; i < R.printers.count && R.offered_count < OAP_PRINTERS_MAX; i++) {
         const OAPPrinter *p = &R.printers.printer[i];
-        if (!oap_printer_is_file(p) && p->pdf != OAP_PDF_YES)
+        if (!oap_printer_is_file(p) && !oap_printer_ready(p))
             continue;
         if (uri && !strcmp(p->uri, uri))
             R.row = R.offered_count;
@@ -218,6 +220,8 @@ static void printer_info(void)
         copy(R.info_text, sizeof(R.info_text), "No printer chosen");
     else if (oap_printer_is_file(p))
         copy(R.info_text, sizeof(R.info_text), "Print saves the document as a PDF file on this Amiga");
+    else if (oap_printer_is_secure(p))
+        snprintf(R.info_text, sizeof(R.info_text), "Encrypted (IPPS). %s", p->note[0] ? p->note : "Verified to print PDF");
     else
         copy(R.info_text, sizeof(R.info_text), p->note[0] ? p->note : "Verified to print PDF");
 }

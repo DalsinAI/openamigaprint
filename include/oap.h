@@ -24,6 +24,7 @@ typedef struct OAPUri {
     char host[256];
     unsigned short port;
     char path[384];
+    int secure;                     /* ipps:// (IPP over TLS) */
 } OAPUri;
 
 void oap_job_defaults(OAPJobOptions *o);

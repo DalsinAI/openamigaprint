@@ -30,7 +30,7 @@ The regression suite covers exact MIME matching, missing capability attributes, 
 
 ## Known limits
 
-- This build discovers secure IPPS endpoints but does not implement their TLS capability query or printing. They remain unverified and unselectable; no silent TLS downgrade occurs. The separate earlier IPPS branch is not merged into this newer viewer/queue branch.
+- IPPS endpoints are checked and printed to through the TLS abstraction (README, "IPPS"): opentls.library or AmiSSL 5. A printer offering both is listed once, by IPPS when a TLS library is there. A printer's own certificate is trusted by asking, once, and remembered by fingerprint; no silent TLS downgrade occurs, and an IPPS printer is never quietly swapped for its plain IPP twin. (The earlier AmiSSL-only `feature/ipps-firstlight` branch is superseded.)
 - IPv4 local-network mDNS only. No IPv6, routed discovery directory, SSDP fallback, or persistent discovery daemon is claimed.
 - Advertisements with missing target/address/port/resource path remain unverified rather than guessing an endpoint.
 - MintPRINT's Discover / Query separation and endpoint handling were reviewed as a reference. No MintPRINT implementation or artwork has been copied into this change.

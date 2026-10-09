@@ -15,7 +15,7 @@ int oap_preferences_store(const char *name,const char *uri,char *error,size_t ca
     char current[OAP_SELECTION_URI_MAX],path[256],archived[OAP_SELECTION_URI_MAX];
     LONG got;FILE *f;size_t n;
     if(!name||!uri||strchr(name,':')||strlen(name)>200 ||
-       strncmp(uri,"ipp://",6)||(n=strlen(uri))>=sizeof(current)){
+       (strncmp(uri,"ipp://",6)&&strncmp(uri,"ipps://",7))||(n=strlen(uri))>=sizeof(current)){
         snprintf(error,cap,"Invalid printer preference");return 0;
     }
     if(!SetVar((STRPTR)name,(STRPTR)uri,(LONG)n,GVF_GLOBAL_ONLY|GVF_SAVE_VAR)){
