@@ -27,6 +27,17 @@ static const char dev_name[]="oapspool.device";
 static const char dev_id[]="oapspool.device 0.1 (3.10.2026) OpenPrint\r\n";
 static const char ver[] __attribute__((used))="$VER: oapspool.device 0.1 (3.10.2026) OpenPrint";
 
+/* The RomTag near the start, its table defined at the end. A RomTag that
+ * ends exactly where the hunk ends is not found when the device is
+ * loaded, and GCC 16 put it last (9 Oct 2026; openamigasocket #14). */
+struct dev_init_table {ULONG size;const APTR *vectors;APTR data;APTR init;};
+static const struct dev_init_table init_table;
+const struct Resident romtag={
+    RTC_MATCHWORD,(struct Resident *)&romtag,(APTR)(&romtag+1),
+    RTF_AUTOINIT,OAP_VERSION,NT_DEVICE,0,
+    (char *)dev_name,(char *)dev_id,(APTR)&init_table
+};
+
 static BPTR dev_expunge(REG(a6,struct OAPSpoolBase *b))
 {
     BPTR seg;
@@ -134,11 +145,6 @@ static const APTR vectors[]={
     (APTR)dev_open,(APTR)dev_close,(APTR)dev_expunge,(APTR)dev_null,
     (APTR)dev_beginio,(APTR)dev_abortio,(APTR)-1
 };
-static const struct {ULONG size;const APTR *vectors;APTR data;APTR init;} init_table={
+static const struct dev_init_table init_table={
     sizeof(struct OAPSpoolBase),vectors,NULL,(APTR)dev_init
-};
-const struct Resident romtag={
-    RTC_MATCHWORD,(struct Resident *)&romtag,(APTR)(&romtag+1),
-    RTF_AUTOINIT,OAP_VERSION,NT_DEVICE,0,
-    (char *)dev_name,(char *)dev_id,(APTR)&init_table
 };
