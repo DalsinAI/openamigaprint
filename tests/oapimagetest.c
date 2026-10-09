@@ -66,5 +66,10 @@ int main(int argc,char **argv)
 close_device:
     CloseDevice((struct IORequest *)io);
 out:
-    if(io)DeleteIORequest((struct IORequest *)io);if(port)DeleteMsgPort(port);if(cm)FreeColorMap(cm);if(bm)FreeBitMap(bm);if(GfxBase)CloseLibrary((struct Library *)GfxBase);return rc;
+    if(io)DeleteIORequest((struct IORequest *)io);
+    if(port)DeleteMsgPort(port);
+    if(cm)FreeColorMap(cm);
+    if(bm)FreeBitMap(bm);
+    if(GfxBase)CloseLibrary((struct Library *)GfxBase);
+    return rc;
 }

@@ -52,6 +52,6 @@ void oap_gt_erase(struct Window *win);
 /* The pen numbers, from the screen's DrawInfo. */
 UWORD oap_gt_pen(OAPGT *g, int which);
 
-/* The first gadget in a list with this ID, or NULL. */
+/* The gadget CreateGadget answered for this ID (the last with it), or NULL. */
 struct Gadget *oap_gt_find(struct Gadget *list, UWORD id);
 #endif

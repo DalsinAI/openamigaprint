@@ -20,7 +20,8 @@ static OAPDiscovered *service(OAPDiscovery *d,const OAPName *name){size_t i;int 
 static int valid_path(const char *s){const unsigned char *p=(const unsigned char *)s;if(!s[0])return 0;for(;*p;p++)if(*p<=32||*p>=127||*p=='#'||*p=='\\')return 0;return 1;}
 static void txt(OAPDiscovered *e,const unsigned char *p,size_t n){size_t x=0;while(x<n){unsigned z=p[x++];const unsigned char *v;size_t key;if(x+z>n)return;v=memchr(p+x,'=',z);if(v){key=(size_t)(v-(p+x));if(key==2&&tolower(p[x])=='r'&&tolower(p[x+1])=='p'){char b[256];text(b,sizeof(b),v+1,z-key-1);if(valid_path(b)&&strlen(b)+2<sizeof(e->path)){if(b[0]=='/')strcpy(e->path,b);else{e->path[0]='/';strcpy(e->path+1,b);}}}else if(key==2&&tolower(p[x])=='t'&&tolower(p[x+1])=='y')text(e->label,sizeof(e->label),v+1,z-key-1);}x+=z;}e->have_txt=1;}
 static int dns_pass(OAPDiscovery *d,const unsigned char *p,size_t n,int pass){size_t x=12,i;unsigned total,qd;if(n<12||!(p[2]&0x80)||(p[2]&0x7a)||(p[3]&15))return 0;qd=u16(p+4);total=u16(p+6)+u16(p+8)+u16(p+10);if(qd>96||total>256)return 0;for(i=0;i<qd;i++){OAPName q;if(!name_read(p,n,&x,&q)||n-x<4)return 0;x+=4;}for(i=0;i<total;i++){OAPName name,target;size_t begin,end,y;unsigned type,cl,rd;uint32_t ttl;OAPDiscovered *e;
- if(!name_read(p,n,&x,&name)||n-x<10)return 0;type=u16(p+x);cl=u16(p+x+2)&0x7fff;ttl=u32(p+x+4);rd=u16(p+x+8);x+=10;begin=x;end=x+rd;if(end>n)return 0;
+ if(!name_read(p,n,&x,&name)||n-x<10)return 0;
+ type=u16(p+x);cl=u16(p+x+2)&0x7fff;ttl=u32(p+x+4);rd=u16(p+x+8);x+=10;begin=x;end=x+rd;if(end>n)return 0;
  if(type==12||type==33){y=begin+(type==33?6:0);if(y>end||!name_read(p,n,&y,&target)||y!=end)return 0;}
  if(type==16){y=begin;while(y<end){unsigned z=p[y++];if(y+z>end)return 0;y+=z;}}
  if(pass>=0&&cl==1){

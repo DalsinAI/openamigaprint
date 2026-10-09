@@ -1,24 +1,27 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* Deterministic transport tests: no sockets and no real printer jobs. */
 #include "oap.h"
-#include "oap_discovery.h"
+#include "oap_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 static int checks, mode, writes, opened, closed, cancel_mode, queried;
 #define CHECK(x) do {checks++;if(!(x)){fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x);exit(1);}}while(0)
+struct OAPConn { int magic; };
+static struct OAPConn the_conn = { 42 };
 int oap_net_start(void){return 1;}
 void oap_net_stop(void){}
-int oap_net_connect(const char *h,unsigned p){(void)h;(void)p;opened++;return 42;}
-void oap_net_close(int fd){CHECK(fd==42);closed++;}
-int oap_net_write(int fd,const void *buf,size_t n){CHECK(fd==42);CHECK(buf!=NULL&&n>0);writes++;return mode!=4;}
+OAPConn *oap_conn_open(const OAPUri *u,char *note,size_t n){(void)u;(void)note;(void)n;opened++;return &the_conn;}
+void oap_conn_close(OAPConn *c){if(!c)return;CHECK(c->magic==42);closed++;}
+int oap_conn_write(OAPConn *c,const void *buf,size_t n,unsigned s){(void)s;CHECK(c->magic==42);CHECK(buf!=NULL&&n>0);writes++;return mode!=4;}
+int oap_http_post(OAPConn *c,const OAPUri *u,unsigned long len){CHECK(u&&len>0);return oap_conn_write(c,"POST",4,5);}
 int oap_query_pdf(const char *uri,OAPCaps *c,char *note,size_t n){
  (void)uri;queried++;memset(c,0,sizeof(*c));c->pdf=mode==1?OAP_PDF_NO:OAP_PDF_YES;c->accepting=1;c->color=1;
  snprintf(note,n,"mock query");return 1;
 }
-int oap_receive_ipp(int fd,unsigned char *out,size_t cap,size_t *n,char *note,size_t nc){
+int oap_receive_ipp(OAPConn *c,unsigned char *out,size_t cap,size_t *n,unsigned secs,char *note,size_t nc){
  const unsigned char p[]={1,1,0,0,0,0,0,1,2,0x21,0,6,'j','o','b','-','i','d',0,4,0,0,0,42,3};
- CHECK(fd==42);CHECK(cap>=sizeof(p));if(mode==2){snprintf(note,nc,"mock lost reply");return 0;}
+ (void)secs;CHECK(c->magic==42);CHECK(cap>=sizeof(p));if(mode==2){snprintf(note,nc,"mock lost reply");return 0;}
  memcpy(out,p,sizeof(p));*n=mode==3?8:sizeof(p);return 1;
 }
 static int progress(void *ctx,const char *stage,unsigned long sent,unsigned long total){

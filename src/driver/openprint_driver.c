@@ -203,7 +203,8 @@ LONG PRT_STDARGS oap_init(struct PrinterData *pd)
     /* Classic printer-driver init glue obtains ExecBase from _AbsExecBase
      * (the canonical pointer stored at absolute address 4), not from
      * PrinterData.  OS 3.2.x leaves pd_Device.dd_ExecBase clear here. */
-    SysBase=*(struct ExecBase * volatile *)4;
+    /* (an asm read: GCC 12 and later reject a C read of address 4 as out of bounds) */
+    __asm__ volatile("move.l 4.w,%0" : "=a"(SysBase));
     if(!SysBase&&pd->pd_Device.dd_ExecBase)SysBase=(struct ExecBase *)pd->pd_Device.dd_ExecBase;
     reset_state();
     return 0;

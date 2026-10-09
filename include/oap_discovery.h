@@ -29,12 +29,7 @@ int oap_http_response(const unsigned char *, size_t, int, unsigned char *, size_
 int oap_pdf_eligible(const OAPDiscovered *);
 int oap_discovery_save(const char *, const OAPDiscovery *, int, const char *);
 int oap_discovery_load(const char *, OAPDiscovery *, int *, char *, size_t);
-int oap_net_start(void);
-int oap_net_connect(const char *,unsigned);
-int oap_net_write(int,const void *,size_t);
-void oap_net_stop(void);
-void oap_net_close(int);
-int oap_query_pdf(const char *, OAPCaps *, char *, size_t);
-int oap_discover_run(const char *);
-int oap_receive_ipp(int, unsigned char *, size_t, size_t *, char *, size_t);
+/* C:OAPDiscover: searches the network and writes what it finds to `output`
+ * (oap_discovery_save) as it goes. Its connections are in oap_net.h. */
+int oap_discover_run(const char *output);
 #endif

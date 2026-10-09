@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "oap_str.h"
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -112,13 +113,7 @@ static struct NewMenu menus[] = {
     { NM_END, NULL, NULL, 0, 0, NULL }
 };
 
-static void copy(char *dst, size_t cap, const char *src)
-{
-    if (!cap)
-        return;
-    strncpy(dst, src ? src : "", cap - 1);
-    dst[cap - 1] = 0;
-}
+#define copy oap_copy
 
 /* A gadget of ours, only while the list is in the window. */
 static struct Gadget *gad(UWORD id)
@@ -457,11 +452,12 @@ static void fill_queue(void)
     if (lock && fib && Examine(lock, fib)) {
         while (P.job_count < QUEUE_MAX && ExNext(lock, fib)) {
             QueueRow *r = &P.jobs[P.job_count];
-            size_t len = strlen(fib->fib_FileName);
-            if (fib->fib_DirEntryType > 0 || len < 5 || strcmp(fib->fib_FileName + len - 4, ".pdf"))
+            const char *file = (const char *)fib->fib_FileName;
+            size_t len = strlen(file);
+            if (fib->fib_DirEntryType > 0 || len < 5 || strcmp(file + len - 4, ".pdf"))
                 continue;
-            snprintf(r->pdf, sizeof(r->pdf), "%s/%s", OAP_QUEUE_DIR, fib->fib_FileName);
-            snprintf(r->name, sizeof(r->name), "%.*s", (int)(len - 4), fib->fib_FileName);
+            snprintf(r->pdf, sizeof(r->pdf), "%s/%s", OAP_QUEUE_DIR, file);
+            snprintf(r->name, sizeof(r->name), "%.*s", (int)(len - 4), file);
             if (fib->fib_Size >= 1024L * 1024L)
                 snprintf(r->size, sizeof(r->size), "%ld.%ld MB", (long)fib->fib_Size / 1048576L, (long)fib->fib_Size % 1048576L / 104858L);
             else

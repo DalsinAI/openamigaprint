@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 #include "oav_jobs.h"
 #include "oap_queue.h"
+#include "oap_str.h"
 #include <exec/types.h>
 #include <dos/dos.h>
 #include <dos/dostags.h>
@@ -11,7 +12,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 static int mkdir_amiga(const char *p){BPTR l=Lock((STRPTR)p,ACCESS_READ);if(l){UnLock(l);return 1;}l=CreateDir((STRPTR)p);if(l)UnLock(l);return l!=0;}
-static void copystr(char *d,size_t n,const char *s){if(n){strncpy(d,s,n-1);d[n-1]=0;}}
+#define copystr oap_copy
 int oav_submit(const OAVRequest *r,char *request,size_t cap,char *err,size_t errcap)
 {
  struct DateStamp ds;static unsigned long seq;char path[256],cmd[320];FILE *f;int fd,i;LONG rc;
@@ -65,7 +66,8 @@ int oav_result(const char *req,char *state,size_t statecap,char *msg,size_t msgc
 {
  char p[OAV_PATH_MAX+16],line[1024];FILE *f;
  snprintf(p,sizeof(p),"%s.result",req);f=fopen(p,"r");if(!f)return 0;
- if(statecap)state[0]=0;if(msgcap)msg[0]=0;
+ if(statecap)state[0]=0;
+ if(msgcap)msg[0]=0;
  while(fgets(line,sizeof(line),f)){
   char *v=strchr(line,'='),*e;if(!v)continue;*v++=0;e=strpbrk(v,"\r\n");if(e)*e=0;
   if(!strcmp(line,"state"))copystr(state,statecap,v);
@@ -94,6 +96,8 @@ int oav_update_queue_state(const char *pdf,const char *state,const char *uri,con
  if(in){while(fgets(line,sizeof(line),in)){if(strncmp(line,"state=",6)&&strncmp(line,"printer=",8)&&strncmp(line,"message=",8))fputs(line,out);}if(ferror(in))bad=1;fclose(in);}
  else fprintf(out,"pdf=%s\n",pdf);
  fprintf(out,"state=%s\nprinter=%s\nmessage=%s\n",state,uri?uri:"",message?message:"");
- if(ferror(out))bad=1;if(fclose(out))bad=1;if(bad){remove(tmp);return 0;}
+ if(ferror(out))bad=1;
+ if(fclose(out))bad=1;
+ if(bad){remove(tmp);return 0;}
  remove(path);if(rename(tmp,path)){remove(tmp);return 0;}return 1;
 }
