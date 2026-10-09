@@ -9,7 +9,7 @@ mkdir -p "$OUT"
 CC=${HOST_CC:-cc}
 "$CC" -shared -fPIC "$ROOT/tests/host/deny_mdns.c" -o "$OUT/deny.so" -ldl
 "$CC" -I"$ROOT/include" -O2 -Wall -Wextra -Werror \
-    "$ROOT"/src/discovery/*.c "$ROOT/src/core/ipp.c" "$ROOT/src/net/conn.c" "$ROOT/src/net/ipp_client.c" \
+    "$ROOT"/src/discovery/*.c "$ROOT/src/core/ipp.c" "$ROOT"/src/net/*.c "$ROOT/src/tls/tls.c" "$ROOT/src/tls/trust.c" \
     -o "$OUT/discover"
 rc=0
 LD_PRELOAD="$OUT/deny.so" "$OUT/discover" "$OUT/result.tsv" || rc=$?

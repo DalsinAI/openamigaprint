@@ -2,6 +2,7 @@
 /* The printers OpenPrint knows (include/oap_printers.h). */
 #include "oap_printers.h"
 #include "oap_discovery.h"
+#include "oap_tls.h"
 #include <exec/types.h>
 #include <dos/dos.h>
 #include <dos/var.h>
@@ -9,6 +10,7 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "oap_str.h"
 
@@ -17,6 +19,16 @@
 int oap_printer_is_file(const OAPPrinter *p)
 {
     return p && !strcmp(p->uri, OAP_SAVE_AS_PDF);
+}
+
+int oap_printer_is_secure(const OAPPrinter *p)
+{
+    return p && !strncmp(p->uri, "ipps://", 7);
+}
+
+int oap_printer_ready(const OAPPrinter *p)
+{
+    return p && p->pdf == OAP_PDF_YES && (!oap_printer_is_secure(p) || oap_cert_usable(p->cert));
 }
 
 void oap_printer_name_from_uri(const char *uri, char *name, size_t cap)
@@ -94,7 +106,8 @@ void oap_printers_load(OAPPrinterList *list)
     if (got > 0) {
         buffer[got < (LONG)sizeof(buffer) ? got : (LONG)sizeof(buffer) - 1] = 0;
         for (line = buffer; line && *line; line = next) {
-            char *cursor = line, *uri, *pdf, *name, *note;
+            char *cursor = line, *uri, *pdf, *name, *note, *cert;
+            int at;
             next = strchr(line, '\n');
             if (next)
                 *next++ = 0;
@@ -102,14 +115,19 @@ void oap_printers_load(OAPPrinterList *list)
             pdf = field(&cursor);
             name = field(&cursor);
             note = field(&cursor);
-            if (!strncmp(uri, "ipp://", 6) || !strncmp(uri, "ipps://", 7))
+            cert = field(&cursor);
+            if (!strncmp(uri, "ipp://", 6) || !strncmp(uri, "ipps://", 7)) {
                 oap_printers_put(list, uri, name, pdf[0] - '0', note);
+                at = oap_printers_find(list, uri);
+                if (at >= 0 && cert[0] >= '0' && cert[0] <= '9')
+                    list->printer[at].cert = atoi(cert);
+            }
         }
     }
     got = GetVar((STRPTR)"OpenPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY);
     if (got <= 0)                              /* saved before the rename */
         got = GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY);
-    if (got > 6 && !strncmp(def, "ipp://", 6) && oap_printers_find(list, def) < 0)
+    if (got > 6 && (!strncmp(def, "ipp://", 6) || !strncmp(def, "ipps://", 7)) && oap_printers_find(list, def) < 0)
         oap_printers_put(list, def, NULL, OAP_PDF_YES, "Your default printer");
 }
 
@@ -123,7 +141,7 @@ int oap_printers_save(const OAPPrinterList *list)
         int n;
         if (oap_printer_is_file(p))
             continue;
-        n = snprintf(buffer + used, sizeof(buffer) - used, "%s\t%d\t%s\t%s\n", p->uri, p->pdf, p->name, p->note);
+        n = snprintf(buffer + used, sizeof(buffer) - used, "%s\t%d\t%s\t%s\t%d\n", p->uri, p->pdf, p->name, p->note, p->cert);
         if (n < 0 || (size_t)n >= sizeof(buffer) - used)
             break;
         used += (size_t)n;
@@ -131,15 +149,45 @@ int oap_printers_save(const OAPPrinterList *list)
     return SetVar((STRPTR)OAP_PRINTERS_VAR, (STRPTR)buffer, (LONG)used, GVF_GLOBAL_ONLY | GVF_SAVE_VAR | GVF_BINARY_VAR) != 0;
 }
 
+/* A printer found by ipps:// replaces the same printer remembered by
+ * ipp:// (by name), unless that one is the default. */
+static void drop_plain_twin(OAPPrinterList *list, const char *twin_name, const char *default_uri)
+{
+    char name[OAP_PRINTER_NAME_MAX];
+    int i;
+    copy(name, sizeof(name), twin_name);       /* a copy: the entries move under it */
+    for (i = 0; i < list->count; i++) {
+        OAPPrinter *p = &list->printer[i];
+        if (!oap_printer_is_file(p) && !oap_printer_is_secure(p) && !strcmp(p->name, name) &&
+            strcmp(p->uri, default_uri)) {
+            memmove(p, p + 1, (size_t)(list->count - i - 1) * sizeof(*p));
+            list->count--;
+            i--;
+        }
+    }
+}
+
 int oap_printers_merge(OAPPrinterList *list, const OAPDiscovery *scan)
 {
+    char def[OAP_SELECTION_URI_MAX] = "";
     size_t i;
+    if (GetVar((STRPTR)"OpenPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY) <= 0 &&
+        GetVar((STRPTR)"OpenAmigaPrint/PrinterURI", (STRPTR)def, sizeof(def), GVF_GLOBAL_ONLY) <= 0)   /* before the rename */
+        def[0] = 0;
     for (i = 0; i < scan->count; i++) {
         const OAPDiscovered *d = &scan->printers[i];
         const char *name = d->caps.name[0] ? d->caps.name : d->label;
-        if (!d->uri[0])
+        int at;
+        if (!d->uri[0] || !d->alive)
             continue;
         oap_printers_put(list, d->uri, name, d->caps.pdf, d->note);
+        at = oap_printers_find(list, d->uri);
+        if (at < 0 || !d->secure)
+            continue;
+        list->printer[at].cert = d->cert;
+        copy(list->printer[at].fingerprint, sizeof(list->printer[at].fingerprint), d->fingerprint);
+        copy(list->printer[at].cert_subject, sizeof(list->printer[at].cert_subject), d->cert_subject);
+        drop_plain_twin(list, list->printer[at].name, def);
     }
     return list->count;
 }

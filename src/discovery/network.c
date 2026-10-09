@@ -6,6 +6,7 @@
 #endif
 #include "oap_discovery.h"
 #include "oap_net.h"
+#include "oap_str.h"
 #include "../net/oap_sock.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +25,16 @@ static int dns_send(long fd, const OAPName *name, unsigned type)
     return n && sendto(fd, (OAP_SOCKBUF)p, n, 0, (struct sockaddr *)&sa, sizeof(sa)) == (long)n;
 }
 
+int oap_query_found(OAPDiscovered *e)
+{
+    OAPTlsInfo tls;
+    int ok = oap_query_pdf(e->uri, &e->caps, &tls, e->note, sizeof(e->note));
+    e->cert = tls.verdict;
+    oap_copy(e->fingerprint, sizeof(e->fingerprint), tls.fingerprint);
+    oap_copy(e->cert_subject, sizeof(e->cert_subject), tls.subject);
+    return ok;
+}
+
 int oap_discover_run(const char *output)
 {
     OAPDiscovery *d = calloc(1, sizeof(*d));
@@ -34,7 +45,8 @@ int oap_discover_run(const char *output)
     size_t i;
     struct sockaddr_in sa;
     static unsigned char packet[9000];
-    char failure[256] = "Cannot open local-network discovery socket";
+    char failure[256] = "Cannot open local-network discovery socket", why[200];
+    int secure_ok;
     if (!d)
         return 20;
     oap_discovery_save(output, d, 0, "Opening bsdsocket.library...");
@@ -43,6 +55,7 @@ int oap_discover_run(const char *output)
         free(d);
         return 20;
     }
+    secure_ok = oap_tls_available(why, sizeof(why));   /* ipps:// first when this Amiga has TLS */
     oap_discovery_save(output, d, 0, "Opening discovery UDP socket...");
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0)
@@ -95,6 +108,8 @@ int oap_discover_run(const char *output)
                 continue;
             if (oap_dns_packet(d, packet, (size_t)got)) {
                 parsed++;
+                /* a printer offering both is listed once, from the first report on */
+                oap_discovery_prefer(d, secure_ok);
                 oap_discovery_save(output, d, 0, "Resolving printer names, ports and resource paths...");
             }
         }
@@ -114,7 +129,7 @@ int oap_discover_run(const char *output)
         snprintf(msg, sizeof(msg), "Checking PDF support: %.120s", e->label);
         strcpy(e->note, "Querying Get-Printer-Attributes...");
         oap_discovery_save(output, d, 0, msg);
-        oap_query_pdf(e->uri, &e->caps, e->note, sizeof(e->note));
+        oap_query_found(e);
         oap_discovery_save(output, d, 0, msg);
     }
     {

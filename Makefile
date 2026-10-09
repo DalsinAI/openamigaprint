@@ -5,9 +5,9 @@ CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 CPPFLAGS += -Iinclude
 CORE = src/core/job.c src/core/ipp.c src/core/pdf_demo.c
 
-.PHONY: all test clean test-core test-discovery test-submit test-viewer test-discovery-sendfail
+.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-discovery-sendfail test-ipps
 all: test
-test: test-core test-discovery test-submit test-viewer test-discovery-sendfail
+test: test-core test-discovery test-submit test-auth test-viewer test-discovery-sendfail
 
 build/test_core: tests/test_core.c $(CORE) include/oap.h
 	mkdir -p build
@@ -21,11 +21,17 @@ build/test_discovery: tests/test_discovery.c src/discovery/protocol.c src/discov
 test-discovery: build/test_discovery
 	./build/test_discovery
 
-build/test_submit: tests/test_submit.c src/net/ipp_submit.c src/core/ipp.c src/core/job.c src/discovery/protocol.c include/oap.h include/oap_net.h
+build/test_submit: tests/test_submit.c src/net/ipp_submit.c src/core/ipp.c src/core/job.c src/discovery/protocol.c src/tls/tls.c src/tls/trust.c include/oap.h include/oap_net.h include/oap_tls.h
 	mkdir -p build
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/test_submit.c src/net/ipp_submit.c src/core/ipp.c src/core/job.c src/discovery/protocol.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/test_submit.c src/net/ipp_submit.c src/core/ipp.c src/core/job.c src/discovery/protocol.c src/tls/tls.c src/tls/trust.c
 test-submit: build/test_submit
 	./build/test_submit
+
+build/test_auth: tests/test_auth.c src/net/http_auth.c src/tls/tls.c src/tls/trust.c src/discovery/protocol.c src/discovery/http.c include/oap_net.h include/oap_tls.h
+	mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D_DEFAULT_SOURCE -o $@ tests/test_auth.c src/net/http_auth.c src/tls/tls.c src/tls/trust.c src/discovery/protocol.c src/discovery/http.c
+test-auth: build/test_auth
+	./build/test_auth
 
 build/test_viewer_core: tests/test_viewer_core.c src/viewer/oav_core.c include/oav_core.h
 	mkdir -p build
@@ -36,5 +42,10 @@ test-viewer: build/test_viewer_core
 test-discovery-sendfail:
 	sh tests/test_discovery_sendfail.sh
 
+# IPPS end to end against printers on 127.0.0.1 (ippeveprinter and a login
+# printer), both TLS backends; skips when ippeveprinter or OpenSSL is missing.
+test-ipps:
+	sh tests/host/test_ipps.sh
+
 clean:
-	rm -f build/test_core build/test_discovery build/test_submit build/test_viewer_core build/oap-firstlight.pdf
+	rm -f build/test_core build/test_discovery build/test_submit build/test_auth build/test_viewer_core build/oap-firstlight.pdf

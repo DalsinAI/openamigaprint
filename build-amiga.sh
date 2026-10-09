@@ -9,11 +9,13 @@ python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenPrintTool.info"
 # and on GCC 16 (scripts/build-compilers.sh builds with both).
 APP='-m68000 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul'
 # What printers are reached by: the connection, IPP client and Print-Job.
-NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/ipp_submit.c"
-# The Print requester: it hands sending to C:OAVWorker, so it has no network code.
+NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/ipp_submit.c $ROOT/src/net/http_auth.c $ROOT/src/net/mdns.c"
+. "$ROOT/scripts/tls-flags.sh"
+# The Print requester: it hands sending to C:OAVWorker, so it has no network
+# code (tls.c without a backend: only the words for a certificate's state).
 "$CC" $APP -I"$ROOT/include" \
   -o "$OUT/OpenPrint" \
-  "$ROOT/src/core/job.c" \
+  "$ROOT/src/core/job.c" "$ROOT/src/tls/tls.c" "$ROOT/src/tls/trust.c" \
   "$ROOT/src/amiga/selection_events.c" "$ROOT/src/ui/oap_print_requester.c" "$ROOT/src/ui/oap_gt.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/amiga/main.c" "$ROOT/src/amiga/oap_stack.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" -lamiga
 file "$OUT/OpenPrint"
 wc -c "$OUT/OpenPrint"
@@ -42,12 +44,17 @@ file "$OUT/oapimagetest"
 wc -c "$OUT/oapimagetest"
 
 # Print dialogs require the asynchronous worker even without launching the viewer.
-"$CC" $APP -I"$ROOT/include" \
+"$CC" $APP -I"$ROOT/include" $TLS_FLAGS \
   -o "$OUT/OAVWorker" \
   "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" "$ROOT/src/viewer/oav_worker.c" "$ROOT/src/amiga/oap_stack.c" \
   "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" \
-  "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" $NET -lamiga
+  "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" $NET $TLS_SOURCES -lamiga
 file "$OUT/OAVWorker"
+
+# The network, TLS and IPP code from the command line, for the lab: query, print, trust.
+"$CC" $APP -I"$ROOT/include" $TLS_FLAGS -o "$OUT/OAPIPPSTest" "$ROOT/tests/host/ipps_tool.c" "$ROOT/src/amiga/oap_stack.c" \
+  "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" "$ROOT/src/core/job.c" "$ROOT/src/core/ipp.c" $NET $TLS_SOURCES -lamiga
+file "$OUT/OAPIPPSTest"
 
 python3 "$ROOT/tools/make_oap_icon.py" "$OUT/OpenPrint.info"
 file "$OUT/OpenPrint.info"

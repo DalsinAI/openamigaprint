@@ -12,7 +12,11 @@
  *   - menus with Amiga-key shortcuts, and a key on every button.
  * The lists use the system's fixed-width font so their columns line up.
  * Network work stays with C:OAPDiscover; only printers verified to take PDF
- * can be used for printing. */
+ * can be used for printing. An ipps:// printer with its own certificate
+ * (most printers make one) is trusted here, by asking: Use for printing
+ * shows its fingerprint and asks "Trust this printer?", remembers the
+ * answer (ENVARC:OpenPrint/TrustedPrinters), checks it again, and then
+ * uses it. */
 #include "oap.h"
 #include "oap_discovery.h"
 #include "oap_gt.h"
@@ -20,6 +24,7 @@
 #include "oap_stack.h"
 #include "oap_queue.h"
 #include "oap_selection.h"
+#include "oap_tls.h"
 
 #include <exec/types.h>
 #include <exec/lists.h>
@@ -92,6 +97,7 @@ static struct Printers {
     int click_row;
     char output[160], status_text[256], details_text[256], uri_text[OAP_SELECTION_URI_MAX];
     char address[OAP_SELECTION_URI_MAX], default_uri[OAP_SELECTION_URI_MAX];
+    char use_after[OAP_SELECTION_URI_MAX];      /* trusted just now: use it once the check confirms */
     int scanning, show_all, ticks, queue_ticks, generation, scan_polls;
     unsigned long last_found;
     int nat_w, nat_h, attached;
@@ -182,13 +188,25 @@ static const char *state_word(const OAPPrinter *p)
 {
     if (P.scanning && p->pdf == OAP_PDF_UNKNOWN)
         return "Checking...";
+    if (oap_printer_is_secure(p)) {
+        switch (p->cert) {
+        case OAP_CERT_NOTLS: return "Needs opentls.lib";
+        case OAP_CERT_ASK: return p->pdf == OAP_PDF_YES ? "Trust it to use it" : "Not verified";
+        case OAP_CERT_CHANGED: return "Certificate changed";
+        case OAP_CERT_NAME: case OAP_CERT_DATES: case OAP_CERT_BAD: return "Certificate problem";
+        }
+    }
     if (p->pdf == OAP_PDF_YES)
-        return "Ready";
+        return oap_printer_is_secure(p) ? "Ready (encrypted)" : "Ready";
     if (p->pdf == OAP_PDF_NO)
         return "Can't print PDF";
-    if (!strncmp(p->uri, "ipps://", 7))
-        return "Secure only (IPPS)";
     return "Not verified";
+}
+
+/* Its certificate asks the user before it can be used. */
+static int needs_trust(const OAPPrinter *p)
+{
+    return oap_printer_is_secure(p) && (p->cert == OAP_CERT_ASK || p->cert == OAP_CERT_CHANGED) && p->fingerprint[0];
 }
 
 static OAPPrinter *selected_printer(void)
@@ -201,7 +219,7 @@ static OAPPrinter *selected_printer(void)
 static int usable(void)
 {
     OAPPrinter *p = selected_printer();
-    return p && p->pdf == OAP_PDF_YES && !P.scanning;
+    return p && p->pdf == OAP_PDF_YES && (oap_printer_ready(p) || needs_trust(p)) && !P.scanning;
 }
 
 static void show_details(void)
@@ -211,8 +229,15 @@ static void show_details(void)
         copy(P.details_text, sizeof(P.details_text), "Select a printer to see what it can do.");
         P.uri_text[0] = 0;
     } else {
-        snprintf(P.details_text, sizeof(P.details_text), "%s%s", p->note[0] ? p->note : state_word(p),
-                 !strcmp(p->uri, P.default_uri) ? " (default)" : "");
+        if (needs_trust(p))
+            snprintf(P.details_text, sizeof(P.details_text), "%s. Use for printing shows its certificate and asks.%s",
+                     oap_cert_words(p->cert), !strcmp(p->uri, P.default_uri) ? " (default)" : "");
+        else if (oap_printer_is_secure(p) && p->cert != OAP_CERT_NONE && !oap_cert_usable(p->cert))
+            snprintf(P.details_text, sizeof(P.details_text), "%s%s", oap_cert_words(p->cert),
+                     !strcmp(p->uri, P.default_uri) ? " (default)" : "");
+        else
+            snprintf(P.details_text, sizeof(P.details_text), "%s%s", p->note[0] ? p->note : state_word(p),
+                     !strcmp(p->uri, P.default_uri) ? " (default)" : "");
         copy(P.uri_text, sizeof(P.uri_text), p->uri);
     }
     set_text(G_DETAILS, P.details_text);
@@ -281,7 +306,7 @@ static void begin_scan(const char *uri)
     if (P.scanning)
         return;
     if (uri && !safe_uri(uri)) {
-        show_status("Type an address like ipp://printer.local:631/ipp/print, with no spaces");
+        show_status("Type an address like ipps://printer.local/ipp/print (encrypted) or ipp://192.168.1.50:631/ipp/print");
         return;
     }
     snprintf(P.output, sizeof(P.output), "T:OAPPrinters-%08lx-%d.tsv", (unsigned long)FindTask(NULL), ++P.generation);
@@ -303,6 +328,8 @@ static void begin_scan(const char *uri)
     fill_printers();
 }
 
+static void use_printer(void);
+
 static void end_scan(void)
 {
     P.scanning = 0;
@@ -310,6 +337,22 @@ static void end_scan(void)
     set_disabled(G_CHECK, FALSE);
     oap_printers_save(&P.known);
     fill_printers();
+}
+
+/* After the check of a printer just trusted: use it, if the check bore it out. */
+static void use_after_check(void)
+{
+    if (P.use_after[0]) {
+        int i = oap_printers_find(&P.known, P.use_after);
+        int r;
+        P.use_after[0] = 0;
+        for (r = 0; i >= 0 && r < P.rows; r++)
+            if (P.row_printer[r] == i && oap_printer_ready(&P.known.printer[i])) {
+                P.sel_printer = r;
+                use_printer();
+                break;
+            }
+    }
 }
 
 /* Each poll reads the worker's file: progress while it runs, then the end. */
@@ -322,6 +365,7 @@ static void poll_scan(void)
     if (!P.scanning)
         return;
     if (++P.scan_polls > 90) {                 /* polls come about twice a second: 45 seconds */
+        P.use_after[0] = 0;
         end_scan();
         show_status("The search didn't finish: no answer from the network in 45 seconds. "
                     "Check this Amiga's network is on, then Search again.");
@@ -349,13 +393,76 @@ static void poll_scan(void)
     else
         snprintf(text, sizeof(text), "Search finished: %lu found", found);
     show_status(text);
+    use_after_check();
+}
+
+/* "Trust this printer?", in plain words, the safe answer first. 1 when
+ * the user trusts it; then it is remembered by its fingerprint. */
+static int ask_trust(OAPPrinter *p)
+{
+    struct EasyStruct es;
+    OAPUri u;
+    char key[300], body[900], fp1[64], fp2[64];
+    const char *fp = p->fingerprint;
+    size_t half = strlen(fp) > 48 ? 48 : strlen(fp);
+    LONG answer;
+    if (!oap_parse_ipp_uri(p->uri, &u))
+        return 0;
+    oap_trust_key(u.host, u.port, key, sizeof(key));
+    snprintf(fp1, sizeof(fp1), "%.*s", (int)half, fp);
+    snprintf(fp2, sizeof(fp2), "%s", fp + half);
+    if (p->cert == OAP_CERT_CHANGED)
+        snprintf(body, sizeof(body),
+                 "The certificate of %.60s (%.80s) has changed\n"
+                 "since you trusted it.\n\n"
+                 "That happens when a printer is reset or makes a new\n"
+                 "certificate, and also when another machine pretends\n"
+                 "to be the printer.\n\n"
+                 "Its new fingerprint (SHA-256):\n%s\n%s\n\n"
+                 "Compare it with the one on the printer's own status\n"
+                 "page or panel. Trust the new certificate?",
+                 p->name, u.host, fp1, fp2);
+    else
+        snprintf(body, sizeof(body),
+                 "%.60s (%.80s) proves who it is with its own\n"
+                 "certificate, not one from an authority this Amiga\n"
+                 "knows. Most printers do.\n\n"
+                 "Issued to: %.60s\n"
+                 "Fingerprint (SHA-256):\n%s\n%s\n\n"
+                 "If it matches the one on the printer's own status page\n"
+                 "or panel, trust it: OpenPrint then prints to it\n"
+                 "encrypted, and refuses any other certificate for it.",
+                 p->name, u.host, p->cert_subject[0] ? p->cert_subject : "(no name)", fp1, fp2);
+    es.es_StructSize = sizeof(es);
+    es.es_Flags = 0;
+    es.es_Title = (UBYTE *)"Trust this printer?";
+    es.es_TextFormat = (UBYTE *)"%s";
+    es.es_GadgetFormat = (UBYTE *)(p->cert == OAP_CERT_CHANGED ? "Don't trust it|Trust the new one" : "Don't trust it|Trust this printer");
+    answer = EasyRequest(P.win, &es, NULL, (ULONG)body);
+    if (answer != 0)                           /* the left button (1), or no answer: don't */
+        return 0;
+    if (!oap_trust_remember(key, p->fingerprint, p->cert_subject)) {
+        show_status("Couldn't save the trusted certificate to ENVARC:OpenPrint/TrustedPrinters");
+        return 0;
+    }
+    return 1;
 }
 
 static void use_printer(void)
 {
     OAPPrinter *p = selected_printer();
     char error[256], text[300];
-    if (!p || p->pdf != OAP_PDF_YES) {
+    if (p && needs_trust(p) && p->pdf == OAP_PDF_YES) {
+        if (!ask_trust(p)) {
+            show_status("Not trusted: OpenPrint won't print to it");
+            return;
+        }
+        copy(P.use_after, sizeof(P.use_after), p->uri);
+        begin_scan(p->uri);                    /* check it again with the trusted certificate */
+        show_status("Trusted. Checking the printer again before using it...");
+        return;
+    }
+    if (!p || !oap_printer_ready(p)) {
         show_status("Only printers verified to take PDF can be used for printing");
         return;
     }
@@ -375,8 +482,11 @@ static void test_page(void)
 {
     OAPPrinter *p = selected_printer();
     char program[256], cmd[900];
-    if (!p || p->pdf != OAP_PDF_YES)
+    if (!p || !oap_printer_ready(p)) {
+        if (p && needs_trust(p))
+            show_status("Trust the printer first: click Use for printing");
         return;
+    }
     if (!oap_pdf_write_demo("T:OpenPrint-TestPage.pdf", "OpenPrint test page")) {
         show_status("Couldn't write the test page to T:");
         return;
@@ -563,8 +673,8 @@ static void layout(int iw, int ih)
     /* columns, in characters of the fixed font: the list's width less its scroller */
     chars = (G->lw - 2 * OAP_GT_INSET - 22) / g->fixed_w;
     G->pcols[2] = 4;
-    G->pcols[1] = 19;
-    G->pcols[0] = (rest = chars - 23) > 8 ? rest : 8;
+    G->pcols[1] = 20;
+    G->pcols[0] = (rest = chars - 24) > 8 ? rest : 8;
     chars = (iw - 2 * OAP_GT_MARGIN - 2 * OAP_GT_INSET - 22) / g->fixed_w;
     G->qcols[3] = 9;
     G->qcols[2] = chars * 22 / 100 > 12 ? chars * 22 / 100 : 12;
@@ -576,7 +686,7 @@ static void natural_size(void)
 {
     OAPGT *g = &P.g;
     int left = 52 * g->fixed_w + 2 * OAP_GT_INSET + 22;      /* room for a long printer name */
-    int right = oap_gt_text_w(g, "Add a printer by address") + 2 * OAP_GT_INSET + 40;
+    int right = oap_gt_text_w(g, "Add by address (ipps:// or ipp://)") + 2 * OAP_GT_INSET + 24;
     int w;
     if ((w = oap_gt_text_w(g, "Print a _test page...") + 2 * OAP_GT_INSET + 32) > right)
         right = w;
@@ -674,7 +784,7 @@ static void draw_static(void)
     oap_gt_group(g, rp, bx + G->rx, by + G->ly, G->rw, G->lh, "Selected printer");
     oap_gt_text(g, rp, bx + G->rx + OAP_GT_INSET,
                 by + G->ly + g->fh + OAP_GT_GAP + 2 * g->line_h + OAP_GT_GAP + 3 * g->gad_h + 4 + 2 * OAP_GT_GAP,
-                "Add a printer by address", TEXTPEN, G->rw - 2 * OAP_GT_INSET);
+                "Add by address (ipps:// or ipp://)", TEXTPEN, G->rw - 2 * OAP_GT_INSET);
     oap_gt_group(g, rp, bx + OAP_GT_MARGIN, by + G->qy, iw - 2 * OAP_GT_MARGIN, G->qh, "Queue");
     header(bx + OAP_GT_MARGIN + OAP_GT_INSET, by + G->qlv_y - fl - 2, G->qcols, 4, qtitles);
 }
@@ -814,7 +924,7 @@ static int printers_main(int argc, char **argv)
     NewList(&P.queue_rows);
     P.sel_printer = P.sel_job = P.click_row = -1;
     copy(P.status_text, sizeof(P.status_text), "Ready");
-    copy(P.address, sizeof(P.address), "ipp://");
+    copy(P.address, sizeof(P.address), "ipps://");      /* encrypted first; ipp:// works as well */
 
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 37);
     GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 37);

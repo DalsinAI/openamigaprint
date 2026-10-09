@@ -24,5 +24,5 @@ int oap_selected_printer(char *uri, size_t cap)
     }
     fclose(f);
     uri[strcspn(uri, "\r\n")] = 0;
-    return strlen(uri) > 6 && !strncmp(uri, "ipp://", 6);
+    return (strlen(uri) > 6 && !strncmp(uri, "ipp://", 6)) || (strlen(uri) > 7 && !strncmp(uri, "ipps://", 7));
 }

@@ -5,7 +5,9 @@
  * Printers and Queue window. Each is kept by name with what was verified
  * about it; the address is a detail, not how people choose a printer.
  * Stored as one line per printer in ENV:/ENVARC:OpenPrint/Printers:
- *   uri <TAB> pdf <TAB> name <TAB> note
+ *   uri <TAB> pdf <TAB> name <TAB> note <TAB> cert
+ * (cert, for ipps:// printers, is what was found about the certificate,
+ * OAP_CERT_* in oap_tls.h; lines from before IPPS have none.)
  * "Save as PDF file" is always the first entry and is never stored. */
 #include <stddef.h>
 #include "oap_selection.h"
@@ -24,6 +26,8 @@ typedef struct OAPPrinter {
     char name[OAP_PRINTER_NAME_MAX];
     char note[OAP_PRINTER_NOTE_MAX];
     int pdf;                                   /* OAP_PDF_UNKNOWN / _YES / _NO */
+    int cert;                                  /* ipps://: OAP_CERT_*, what the last check found */
+    char fingerprint[96], cert_subject[128];   /* from the last check, not stored */
 } OAPPrinter;
 
 typedef struct OAPPrinterList {
@@ -44,6 +48,9 @@ int oap_printers_find(const OAPPrinterList *list, const char *uri);
 /* A readable name for an address with no advertised name: its host. */
 void oap_printer_name_from_uri(const char *uri, char *name, size_t cap);
 int oap_printer_is_file(const OAPPrinter *p);
+int oap_printer_is_secure(const OAPPrinter *p);
+/* Verified to take PDF and, over ipps://, its certificate accepted. */
+int oap_printer_ready(const OAPPrinter *p);
 
 /* A helper program beside this one (PROGDIR:, as a full path another
  * process can use) or else in C:. */

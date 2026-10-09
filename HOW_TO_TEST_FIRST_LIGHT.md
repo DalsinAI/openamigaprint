@@ -41,4 +41,4 @@ The page should contain the OpenPrint First Light test text. First Light's built
 - A valid PDF is produced and can be saved.
 - The PDF contains the expected test text.
 
-Printer discovery, IPPS/TLS, capability negotiation, general PDF preview rendering and broad application qualification are separate later gates.
+Printer discovery, IPPS/TLS (now in the README, "IPPS"), capability negotiation, general PDF preview rendering and broad application qualification are separate later gates.

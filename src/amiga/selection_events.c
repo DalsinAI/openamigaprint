@@ -28,11 +28,14 @@ static int subscriber(const struct Node *node)
 }
 static int valid_uri(const char *uri)
 {
-    size_t i;
-    if(!uri || strncmp(uri,"ipp://",6))return 0;
+    size_t i,scheme;
+    if(!uri)return 0;
+    if(!strncmp(uri,"ipp://",6))scheme=6;
+    else if(!strncmp(uri,"ipps://",7))scheme=7;
+    else return 0;
     for(i=0;i<OAP_SELECTION_URI_MAX;i++){
         unsigned char c=(unsigned char)uri[i];
-        if(!c)return i>6;
+        if(!c)return i>scheme;
         if(c<=32 || c==127 || c=='"' || c=='*')return 0;
     }
     return 0;
