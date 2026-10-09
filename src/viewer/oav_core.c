@@ -65,7 +65,8 @@ int oav_place(const OAVLayout *s,unsigned long w,unsigned long h,OAVPlacement *p
 static void point_string(char *out,long v)
 {
  unsigned long a=(unsigned long)(v<0?-v:v);
- sprintf(out,"%s%lu.%02lu",v<0?"-":"",a/100,a%100);
+ /* snprintf: amiga.lib's sprintf (RawDoFmt) can take C's place at link time */
+ snprintf(out,24,"%s%lu.%02lu",v<0?"-":"",a/100,a%100);
 }
 static void fail(char *e,size_t n,const char *s){oap_copy(e,n,s);}
 int oav_pdf_rgb(FILE *f,unsigned long w,unsigned long h,const OAVLayout *s,
