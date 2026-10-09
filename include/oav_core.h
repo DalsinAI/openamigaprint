@@ -7,7 +7,7 @@
 #define OAV_DIM_LIMIT 16384UL
 #define OAV_PIXEL_LIMIT 16777216UL
 #define OAV_FILE_LIMIT 67108864UL
-#define OAV_VERSION "0.2.0-alpha1"
+#define OAV_VERSION "0.5"
 #define OAV_REQUEST_DIR "SYS:Spool/OpenView"
 enum { OAV_A4, OAV_LETTER };
 enum { OAV_FIT, OAV_FILL };

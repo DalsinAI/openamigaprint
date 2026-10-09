@@ -33,6 +33,7 @@ typedef struct OAPGT {
 } OAPGT;
 
 /* Locks the default public screen and takes its font. 0 on failure. */
+extern const char *oap_gt_pubscreen;   /* set before oap_gt_open: a public screen name; NULL is the default screen */
 int oap_gt_open(OAPGT *g);
 /* The window would not fit: Topaz 8 from now on. 0 when already Topaz. */
 int oap_gt_fall_back(OAPGT *g);

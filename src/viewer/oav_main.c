@@ -8,7 +8,13 @@
  *     as a PDF the worker makes first (C:OAVWorker).
  *   - Animations and sounds bring their datatype's own player bar.
  *   - A file dropped on the window opens; the ARexx port OPENVIEW takes
- *     the same commands as before. */
+ *     the same commands as before.
+ *   - OpenView 0.5 stands in for MultiView (OpenUp installs it as
+ *     SYS:Utilities/MultiView): MultiView 47's command line (every keyword
+ *     and switch is read; the ones OpenView can't honour are ignored), the
+ *     Workbench tool types of the project's icon, and ARexx on the port
+ *     MULTIVIEW.n (or PORTNAME) with MultiView's commands as well. What it
+ *     shows is whatever a datatype reads: no kind of file is named here. */
 #include "oav_core.h"
 #include "oav_jobs.h"
 #include "oap_queue.h"
@@ -47,6 +53,8 @@
 #include <proto/gadtools.h>
 #include <proto/wb.h>
 #include <proto/rexxsyslib.h>
+#include <proto/icon.h>
+#include <workbench/icon.h>
 #include <clib/alib_protos.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,19 +64,34 @@
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
-struct Library *UtilityBase, *DataTypesBase, *AslBase, *GadToolsBase, *WorkbenchBase;
+struct Library *UtilityBase, *DataTypesBase, *AslBase, *GadToolsBase, *WorkbenchBase, *IconBase;
 struct RxsLib *RexxSysBase;
-static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.4 (6.10.2026)";
+static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.5 (9.10.2026)";
 
 #define MAX_JOBS 128
 #define REXX_NAME "OPENVIEW"
+/* MultiView 47's template, word for word (MultiView ? says it too) */
+#define MV_TEMPLATE "FILE,CLIPBOARD/S,CLIPUNIT/K/N,SCREEN/S,PUBSCREEN/K,REQUESTER/S,BOOKMARK/S,FONTNAME/K,FONTSIZE/K/N," \
+                    "BACKDROP/S,WINDOW/S,PORTNAME/K,IMMEDIATE/S,REPEAT/S,PRTUNIT/K/N,WINDOWLEFT/K/N,WINDOWTOP/K/N," \
+                    "WINDOWWIDTH/K/N,WINDOWHEIGHT/K/N,AUTORESIZE/S"
 
 enum {
     B_OPEN = 1, B_PAGE, B_FIT, B_ONE, B_MINUS, B_PLUS, B_PLAY, B_PAUSE, B_STOP, B_PREV, B_NEXT,
     B_PAPER, B_ORIENT, B_SCALE, B_EXPORT, B_PRINT, B_REFRESH, B_CANCEL, B_INFO, B_VSCROLL, B_HSCROLL,
     B_STATUS, B_QUIT, B_PRINTDLG, B_VIEW, B_PRINTERS, B_FIND, B_FINDNEXT,
-    RX_SET = 200, RX_VERSION, RX_HELP, RX_JOB, RX_JOBS
+    RX_SET = 200, RX_VERSION, RX_HELP, RX_JOB, RX_JOBS,
+    /* MultiView's ARexx commands */
+    RX_RELOAD, RX_SAVEAS, RX_ABOUT, RX_COPY, RX_PASTE, RX_CLEARSEL, RX_GETTRIG, RX_DOTRIG, RX_SCREEN, RX_PUBSCREEN,
+    RX_GETDIR, RX_GETFILE, RX_GETOBJ, RX_MINSIZE, RX_NORMSIZE, RX_MAXSIZE, RX_WTOFRONT, RX_WTOBACK, RX_STOFRONT,
+    RX_STOBACK, RX_ACTIVATE, RX_BEEP
 };
+
+/* MultiView's command line (or the project icon's tool types), as read. Numbers are -1 when not given. */
+typedef struct Options {
+    char file[OAV_PATH_MAX], pubscreen[64], portname[64], fontname[64];
+    int clipboard, requester, window, immediate, repeat;
+    long fontsize, left, top, width, height;
+} Options;
 
 typedef struct QueueRow { char name[128], path[OAV_PATH_MAX], state[32]; } QueueRow;
 
@@ -115,7 +138,11 @@ static struct App {
     struct Gadget *glist;
     struct Menu *menu;
     struct AppWindow *appwin;
-    struct MsgPort *appport, *rexxport;
+    struct MsgPort *appport, *rexxport, *mvport;
+    Options opt;
+    struct TextAttr fontattr;
+    char fontbuf[80], mvname[64], fullpath[OAV_PATH_MAX], infoline[256];
+    LONG normal_w, normal_h;
     Object *dto;
     struct IBox area;                       /* where the datatype object may draw */
     char title[160];
@@ -283,6 +310,33 @@ static void pdf_not_shown(const char *path)
     draw_view();
 }
 
+static int do_trigger(ULONG id);
+
+/* The file's size (0 for a drawer, which a datatype may show too), its full name, and -1 when it can't be examined. */
+static long file_facts(const char *path, int *is_dir, char *full, size_t fullsize)
+{
+    struct FileInfoBlock *fib;
+    BPTR lock;
+    long size = -1;
+    *is_dir = 0;
+    full[0] = 0;
+    lock = Lock((STRPTR)path, ACCESS_READ);
+    if (!lock)
+        return -1;
+    fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL);
+    if (fib) {
+        if (Examine(lock, fib)) {
+            *is_dir = fib->fib_DirEntryType > 0;
+            size = *is_dir ? 0 : (long)fib->fib_Size;
+        }
+        FreeDosObject(DOS_FIB, fib);
+    }
+    if (!NameFromLock(lock, (STRPTR)full, (LONG)fullsize))
+        copystr(full, fullsize, path);
+    UnLock(lock);
+    return size;
+}
+
 static int load_file(const char *path)
 {
     Object *dto;
@@ -296,33 +350,27 @@ static int load_file(const char *path)
     struct FrameInfo fi;
     struct dtFrameBox frame;
     char msg[256];
-    FILE *f;
     long bytes;
-    const char *ext;
+    int is_dir, fresh = 0;
+    char full[OAV_PATH_MAX];
 
     if (!oav_safe_field(path)) {
         status("Invalid or overlong file path");
         return 0;
     }
-    ext = strrchr(path, '.');
-    if (ext && (!strcasecmp(ext, ".docx") || !strcasecmp(ext, ".pptx"))) {
-        status(oav_format_note(path));
-        return 0;
-    }
-    f = fopen(path, "rb");
-    if (!f) {
+    bytes = file_facts(path, &is_dir, full, sizeof(full));
+    if (bytes < 0) {
         status("Cannot open source file");
         return 0;
     }
-    fseek(f, 0, SEEK_END);
-    bytes = ftell(f);
-    fclose(f);
-    if (bytes < 0 || bytes > (long)OAV_FILE_LIMIT) {
+    if (bytes > (long)OAV_FILE_LIMIT) {
         status("Source exceeds the 64 MiB viewer file limit");
         return 0;
     }
     status("Loading datatype...");
     dto = NewDTObject((APTR)path, A.open_node[0] ? DTA_NodeName : TAG_IGNORE, (ULONG)A.open_node,
+                      A.fontattr.ta_Name ? DTA_TextAttr : TAG_IGNORE, (ULONG)&A.fontattr,
+                      DTA_Repeat, (ULONG)(A.opt.repeat ? TRUE : FALSE),
                       DTA_SourceType, DTST_FILE, ICA_TARGET, ICTARGET_IDCMP, PDTA_DestMode, PMODE_V43,
                       PDTA_Screen, (ULONG)A.g.screen, PDTA_Remap, TRUE, AGA_Secure, TRUE, DTA_ControlPanel, TRUE, GA_ID, 1000, TAG_DONE);
     if (!dto) {
@@ -332,9 +380,11 @@ static int load_file(const char *path)
             pdf_not_shown(path);
             return 1;
         }
-        if (err == ERROR_OBJECT_WRONG_TYPE || err == 2000)
-            snprintf(msg, sizeof(msg), "%.60s: no datatype on this Amiga can open this kind of file", name);
-        else
+        if (err == ERROR_OBJECT_WRONG_TYPE || err == 2000) {
+            const char *note = oav_format_note(path);
+            snprintf(msg, sizeof(msg), "%.50s: no datatype on this Amiga opens this kind of file. %s", name,
+                     strncmp(note, "A compatible", 12) ? note : "");
+        } else
             snprintf(msg, sizeof(msg), "%.60s couldn't be opened (DOS error %ld)", name, (long)err);
         status(msg);
         return 0;
@@ -452,13 +502,16 @@ static int load_file(const char *path)
         }
     }
     close_content();
-    if (strcmp(A.path, path))
+    if (strcmp(A.path, path)) {
         find_forget();                         /* another file: its text is read again when searched */
+        fresh = 1;
+    }
     A.dto = dto;
     A.group = group;
     A.natural_w = w;
     A.natural_h = h;
     copystr(A.path, sizeof(A.path), path);
+    copystr(A.fullpath, sizeof(A.fullpath), full);
     draw_view();
     if (AddDTObject(A.win, NULL, dto, -1) < 0) {
         DisposeDTObject(dto);
@@ -475,8 +528,11 @@ static int load_file(const char *path)
     else
         snprintf(msg, sizeof(msg), "%.60s \xb7 %s", FilePart((STRPTR)path), dt && dt->dtn_Header ? (char *)dt->dtn_Header->dth_Name : "Datatype");
     status(msg);
+    copystr(A.infoline, sizeof(A.infoline), msg);
     RefreshDTObjectA(A.dto, A.win, NULL, NULL);
     scroll_info();
+    if (fresh && A.opt.immediate && trigger_supported(STM_PLAY))      /* IMMEDIATE: an animation or a sound starts at once */
+        do_trigger(STM_PLAY);
     return 1;
 }
 
@@ -952,7 +1008,7 @@ static int action(int id, const char *arg)
     case B_STOP: return do_trigger(STM_STOP);
     case B_PREV: return do_trigger(STM_BROWSE_PREV);
     case B_NEXT: return do_trigger(STM_BROWSE_NEXT);
-    case B_INFO: status(oav_format_note(A.path)); return 1;
+    case B_INFO: status(A.dto && A.infoline[0] ? A.infoline : oav_format_note(A.path)); return 1;
     case B_FIND: return find_start(arg);
     case B_FINDNEXT: return A.find_what[0] ? find_next() : find_start(NULL);
     case B_QUIT: A.running = 0; return 1;
@@ -1008,16 +1064,27 @@ static int set_option(const char *key, const char *val)
     return 1;
 }
 
-/* ---- ARexx: the port OPENVIEW ------------------------------------------- */
+/* ---- ARexx: the port OPENVIEW, and MultiView's MULTIVIEW.n ------------------ */
 
+/* args: 0 none, 1 the rest of the line (needed), 2 two words, 3 the rest of the line (may be empty) */
 static const struct { const char *name; int id; int args; } rexx_commands[] = {
-    { "SET", RX_SET, 2 }, { "VERSION", RX_VERSION, 0 }, { "HELP", RX_HELP, 0 }, { "OPEN", B_OPEN, 1 },
+    { "SET", RX_SET, 2 }, { "VERSION", RX_VERSION, 0 }, { "HELP", RX_HELP, 0 }, { "OPEN", B_OPEN, 3 },
     { "SAVEPDF", B_EXPORT, 1 }, { "PRINT", B_PRINT, 0 }, { "PLAY", B_PLAY, 0 }, { "PAUSE", B_PAUSE, 0 },
     { "STOP", B_STOP, 0 }, { "NEXT", B_NEXT, 0 }, { "PREVIOUS", B_PREV, 0 }, { "FIT", B_FIT, 0 },
     { "ACTUAL", B_ONE, 0 }, { "PAGE", B_PAGE, 0 }, { "PAPER", B_PAPER, 0 }, { "ORIENTATION", B_ORIENT, 0 },
     { "SCALE", B_SCALE, 0 }, { "JOB", RX_JOB, 0 }, { "JOBS", RX_JOBS, 0 }, { "CANCEL", B_CANCEL, 0 },
-    { "REFRESH", B_REFRESH, 0 }, { "QUIT", B_QUIT, 0 }, { "FIND", B_FIND, 1 }, { "FINDNEXT", B_FINDNEXT, 0 }
+    { "REFRESH", B_REFRESH, 0 }, { "QUIT", B_QUIT, 0 }, { "FIND", B_FIND, 1 }, { "FINDNEXT", B_FINDNEXT, 0 },
+    /* MultiView 47's commands (SYS:Locale/Help/english/Sys/Other/mvarexx.help) */
+    { "RELOAD", RX_RELOAD, 0 }, { "SAVEAS", RX_SAVEAS, 3 }, { "ABOUT", RX_ABOUT, 0 }, { "COPY", RX_COPY, 0 },
+    { "PASTE", RX_PASTE, 0 }, { "CLEARSELECTED", RX_CLEARSEL, 0 }, { "GETTRIGGERINFO", RX_GETTRIG, 3 },
+    { "DOTRIGGERMETHOD", RX_DOTRIG, 3 }, { "SCREEN", RX_SCREEN, 3 }, { "PUBSCREEN", RX_PUBSCREEN, 3 },
+    { "GETCURRENTDIR", RX_GETDIR, 0 }, { "GETFILEINFO", RX_GETFILE, 0 }, { "GETOBJECTINFO", RX_GETOBJ, 3 },
+    { "MINIMUMSIZE", RX_MINSIZE, 0 }, { "NORMALSIZE", RX_NORMSIZE, 0 }, { "MAXIMUMSIZE", RX_MAXSIZE, 0 },
+    { "WINDOWTOFRONT", RX_WTOFRONT, 0 }, { "WINDOWTOBACK", RX_WTOBACK, 0 }, { "SCREENTOFRONT", RX_STOFRONT, 0 },
+    { "SCREENTOBACK", RX_STOBACK, 0 }, { "ACTIVATEWINDOW", RX_ACTIVATE, 0 }, { "BEEPSCREEN", RX_BEEP, 0 }
 };
+
+static struct RexxMsg *cur_rm;                 /* the message being answered: stems are set in its caller */
 
 /* The next word of an ARexx command line, quotes allowed; `rest` takes
  * everything left (a file name with spaces needs no quotes then). */
@@ -1050,6 +1117,167 @@ static char *word(char **cursor, int rest)
     return start;
 }
 
+/* MultiView's keyword form "NAME file", "NAME=file" or "NAME "a file"", or the bare value. */
+static char *keyword_value(char *rest, const char *key)
+{
+    size_t n = strlen(key), len;
+    if (!rest)
+        return NULL;
+    while (*rest == ' ' || *rest == '\t')
+        rest++;
+    if (!strncasecmp(rest, key, n) && (rest[n] == ' ' || rest[n] == '\t' || rest[n] == '=')) {
+        rest += n;
+        if (*rest == '=')
+            rest++;
+        while (*rest == ' ' || *rest == '\t')
+            rest++;
+    }
+    len = strlen(rest);
+    if (len >= 2 && rest[0] == '"' && rest[len - 1] == '"') {
+        rest[len - 1] = 0;
+        rest++;
+    }
+    return *rest ? rest : NULL;
+}
+
+/* A keyword given as a switch, "CLIPBOARD" or "CLIPBOARD CLIPUNIT 1". */
+static int starts_with_word(const char *s, const char *key)
+{
+    size_t n = strlen(key);
+    return s && !strncasecmp(s, key, n) && (!s[n] || s[n] == ' ' || s[n] == '\t');
+}
+
+static const char *group_name(ULONG group)
+{
+    switch (group) {
+    case GID_SYSTEM: return "System";
+    case GID_TEXT: return "Text";
+    case GID_DOCUMENT: return "Document";
+    case GID_SOUND: return "Sound";
+    case GID_INSTRUMENT: return "Instrument";
+    case GID_MUSIC: return "Music";
+    case GID_PICTURE: return "Picture";
+    case GID_ANIMATION: return "Animation";
+    case GID_MOVIE: return "Movie";
+    default: return "";
+    }
+}
+
+/* STEM.TAIL = value, in the caller's ARexx variables (a stem ends in a dot). */
+static void set_stem(const char *stem, const char *tail, const char *value)
+{
+    char name[96];
+    size_t n, i;
+    if (!cur_rm || !RexxSysBase)
+        return;
+    snprintf(name, sizeof(name), "%.60s%s%.28s", stem, stem[strlen(stem) - 1] == '.' ? "" : ".", tail);
+    n = strlen(name);
+    for (i = 0; i < n; i++)
+        if (name[i] >= 'a' && name[i] <= 'z')
+            name[i] -= 32;
+    SetRexxVar(cur_rm, (CONST_STRPTR)name, (CONST_STRPTR)value, (LONG)strlen(value));
+}
+
+/* GETOBJECTINFO: name, base name, group and ID of the datatype, quoted and comma separated (MultiView's VAR form,
+ * which is also the plain one), or the stem FILENAME, NAME, BASENAME, GROUP, ID. */
+static int rexx_objectinfo(char *rest)
+{
+    struct DataType *dt = NULL;
+    char id[8] = { 0 }, *stem = NULL, *w;
+    const char *name = "", *base = "", *group = "";
+    ULONG gid = 0;
+    if (!A.dto) {
+        copystr(A.resultbuf, sizeof(A.resultbuf), "No object is open");
+        return 10;
+    }
+    GetDTAttrs(A.dto, DTA_DataType, (ULONG)&dt, TAG_DONE);
+    if (dt && dt->dtn_Header) {
+        ULONG v = dt->dtn_Header->dth_ID;
+        name = dt->dtn_Header->dth_Name ? (const char *)dt->dtn_Header->dth_Name : "";
+        base = dt->dtn_Header->dth_BaseName ? (const char *)dt->dtn_Header->dth_BaseName : "";
+        gid = dt->dtn_Header->dth_GroupID;
+        group = group_name(gid);
+        id[0] = (char)(v >> 24); id[1] = (char)(v >> 16); id[2] = (char)(v >> 8); id[3] = (char)v;
+    }
+    while (rest && (w = word(&rest, 0)) != NULL)
+        if (!strcasecmp(w, "STEM"))
+            stem = word(&rest, 0);
+    if (stem) {
+        set_stem(stem, "FILENAME", A.fullpath);
+        set_stem(stem, "NAME", name);
+        set_stem(stem, "BASENAME", base);
+        set_stem(stem, "GROUP", group);
+        set_stem(stem, "ID", id);
+        A.resultbuf[0] = 0;
+        return 0;
+    }
+    snprintf(A.resultbuf, sizeof(A.resultbuf), "\"%s\",\"%s\",\"%s\",\"%s\"", name, base, group, id);
+    return 0;
+}
+
+/* GETTRIGGERINFO: the stem COUNT and n.LABEL, n.COMMAND, n.METHOD (n from 0), else lines "label,command,method". */
+static int rexx_triggerinfo(char *rest)
+{
+    struct DTMethod *m;
+    char *stem = NULL, *w, tail[32], num[16];
+    int i, count = 0;
+    size_t used = 0;
+    if (!A.dto) {
+        copystr(A.resultbuf, sizeof(A.resultbuf), "No object is open");
+        return 10;
+    }
+    m = (struct DTMethod *)GetDTTriggerMethods(A.dto);
+    while (m && count < 128 && m[count].dtm_Label)
+        count++;
+    while (rest && (w = word(&rest, 0)) != NULL)
+        if (!strcasecmp(w, "STEM"))
+            stem = word(&rest, 0);
+    A.resultbuf[0] = 0;
+    if (stem) {
+        snprintf(num, sizeof(num), "%d", count);
+        set_stem(stem, "COUNT", num);
+    }
+    for (i = 0; i < count; i++) {
+        const char *label = m[i].dtm_Label ? (const char *)m[i].dtm_Label : "";
+        const char *command = m[i].dtm_Command ? (const char *)m[i].dtm_Command : "";
+        if (stem) {
+            snprintf(tail, sizeof(tail), "%d.LABEL", i);
+            set_stem(stem, tail, label);
+            snprintf(tail, sizeof(tail), "%d.COMMAND", i);
+            set_stem(stem, tail, command);
+            snprintf(num, sizeof(num), "%lu", (unsigned long)m[i].dtm_Method);
+            snprintf(tail, sizeof(tail), "%d.METHOD", i);
+            set_stem(stem, tail, num);
+        } else if (used < sizeof(A.resultbuf) - 160) {
+            int len = snprintf(A.resultbuf + used, sizeof(A.resultbuf) - used, "%s,%s,%lu\n", label, command, (unsigned long)m[i].dtm_Method);
+            if (len > 0)
+                used += (size_t)len;
+        }
+    }
+    return 0;
+}
+
+static void window_size(int which)
+{
+    struct Window *w = A.win;
+    LONG top;
+    if (!w)
+        return;
+    switch (which) {
+    case RX_MINSIZE:
+        ChangeWindowBox(w, w->LeftEdge, w->TopEdge, w->MinWidth, w->MinHeight);
+        break;
+    case RX_NORMSIZE:
+        ChangeWindowBox(w, w->LeftEdge, w->TopEdge, A.normal_w, A.normal_h);
+        break;
+    default:
+        top = A.g.screen->BarHeight + 1;
+        ChangeWindowBox(w, 0, top, A.g.screen->Width, A.g.screen->Height - top);
+        break;
+    }
+}
+
+/* 0 done, 5 not here (said in the result), 10 failed. */
 static int rexx_command(const char *line, const char **result)
 {
     static char copy[OAV_PATH_MAX + 64];
@@ -1061,25 +1289,30 @@ static int rexx_command(const char *line, const char **result)
     *result = A.resultbuf;
     A.resultbuf[0] = 0;
     if (!verb)
-        return 0;
+        return 10;
     for (i = 0; i < sizeof(rexx_commands) / sizeof(rexx_commands[0]); i++)
         if (!strcasecmp(verb, rexx_commands[i].name))
             break;
     if (i == sizeof(rexx_commands) / sizeof(rexx_commands[0])) {
         copystr(A.resultbuf, sizeof(A.resultbuf), "Unknown command; HELP lists them");
-        return 0;
+        return 10;
     }
     if (rexx_commands[i].args == 1 && !(arg1 = word(&cursor, 1)))
-        return 0;
+        return 10;
     if (rexx_commands[i].args == 2 && (!(arg1 = word(&cursor, 0)) || !(arg2 = word(&cursor, 1))))
-        return 0;
+        return 10;
+    if (rexx_commands[i].args == 3)
+        arg1 = word(&cursor, 1);
     switch (rexx_commands[i].id) {
     case RX_VERSION:
         snprintf(A.resultbuf, sizeof(A.resultbuf), "OpenView %s GadTools", OAV_VERSION);
         break;
     case RX_HELP:
-        copystr(A.resultbuf, sizeof(A.resultbuf), "OPEN FILE | SET KEY VALUE | PRINT | SAVEPDF FILE | PLAY | PAUSE | STOP | NEXT | PREVIOUS | "
-                "FIT | ACTUAL | PAGE | PAPER | ORIENTATION | SCALE | FIND TEXT | FINDNEXT | JOB | CANCEL | JOBS | REFRESH | QUIT");
+        copystr(A.resultbuf, sizeof(A.resultbuf), "OPEN [NAME] FILE | SET KEY VALUE | PRINT | SAVEPDF FILE | PLAY | PAUSE | STOP | NEXT | PREVIOUS | "
+                "FIT | ACTUAL | PAGE | PAPER | ORIENTATION | SCALE | FIND TEXT | FINDNEXT | JOB | CANCEL | JOBS | REFRESH | QUIT | "
+                "and MultiView's: RELOAD ABOUT GETFILEINFO GETCURRENTDIR GETOBJECTINFO GETTRIGGERINFO DOTRIGGERMETHOD "
+                "MINIMUMSIZE NORMALSIZE MAXIMUMSIZE WINDOWTOFRONT WINDOWTOBACK SCREENTOFRONT SCREENTOBACK ACTIVATEWINDOW BEEPSCREEN "
+                "SCREEN PUBSCREEN CLEARSELECTED (COPY PASTE SAVEAS answer 5: not here)");
         break;
     case RX_JOB: {
         char st[32], msg[256];
@@ -1106,64 +1339,149 @@ static int rexx_command(const char *line, const char **result)
         ok = set_option(arg1, arg2);
         copystr(A.resultbuf, sizeof(A.resultbuf), ok ? "Settings applied" : "Invalid SET key or value");
         break;
+    case B_OPEN: {
+        char *name = keyword_value(arg1, "NAME");
+        if (starts_with_word(name, "CLIPBOARD")) {
+            copystr(A.resultbuf, sizeof(A.resultbuf), "OpenView does not show the Clipboard");
+            return 5;
+        }
+        ok = action(B_OPEN, name);
+        copystr(A.resultbuf, sizeof(A.resultbuf), A.message);
+        break;
+    }
+    case RX_RELOAD:
+        reload();
+        break;
+    case RX_ABOUT:
+        ok = action(B_INFO, NULL);
+        copystr(A.resultbuf, sizeof(A.resultbuf), A.message);
+        break;
+    case RX_SAVEAS:
+        copystr(A.resultbuf, sizeof(A.resultbuf), "OpenView saves a picture as a PDF only (SAVEPDF)");
+        return 5;
+    case RX_COPY:
+    case RX_PASTE:
+        copystr(A.resultbuf, sizeof(A.resultbuf), "OpenView has no selection or Clipboard use");
+        return 5;
+    case RX_CLEARSEL:
+    case RX_SCREEN:                     /* OpenView always shows its window on a public screen */
+    case RX_PUBSCREEN:
+        break;
+    case RX_GETTRIG: return rexx_triggerinfo(arg1);
+    case RX_DOTRIG: {
+        char *num = keyword_value(arg1, "METHOD");
+        if (!num)
+            return 10;
+        ok = do_trigger((ULONG)strtoul(num, NULL, 0) & STMF_METHOD_MASK);
+        copystr(A.resultbuf, sizeof(A.resultbuf), A.message);
+        break;
+    }
+    case RX_GETDIR: {
+        STRPTR end;
+        copystr(A.resultbuf, sizeof(A.resultbuf), A.fullpath);
+        end = PathPart((STRPTR)A.resultbuf);
+        *end = 0;
+        break;
+    }
+    case RX_GETFILE:
+        copystr(A.resultbuf, sizeof(A.resultbuf), A.fullpath);
+        break;
+    case RX_GETOBJ: return rexx_objectinfo(arg1);
+    case RX_MINSIZE:
+    case RX_NORMSIZE:
+    case RX_MAXSIZE:
+        window_size(rexx_commands[i].id);
+        break;
+    case RX_WTOFRONT: if (A.win) WindowToFront(A.win); break;
+    case RX_WTOBACK: if (A.win) WindowToBack(A.win); break;
+    case RX_STOFRONT: if (A.g.screen) ScreenToFront(A.g.screen); break;
+    case RX_STOBACK: if (A.g.screen) ScreenToBack(A.g.screen); break;
+    case RX_ACTIVATE: if (A.win) ActivateWindow(A.win); break;
+    case RX_BEEP: DisplayBeep(A.g.screen); break;
     default:
         ok = action(rexx_commands[i].id, arg1);
         copystr(A.resultbuf, sizeof(A.resultbuf),
                 (rexx_commands[i].id == B_PRINT || rexx_commands[i].id == B_EXPORT) && ok ? A.lastreq : A.message);
         break;
     }
-    return ok;
+    return ok ? 0 : 10;
 }
 
-static void rexx_messages(void)
+static void rexx_messages(struct MsgPort *port)
 {
     struct RexxMsg *rm;
-    while (A.rexxport && (rm = (struct RexxMsg *)GetMsg(A.rexxport)) != NULL) {
+    while (port && (rm = (struct RexxMsg *)GetMsg(port)) != NULL) {
         const char *result = NULL;
-        int ok = rexx_command((const char *)rm->rm_Args[0], &result);
-        rm->rm_Result1 = ok ? RC_OK : RC_ERROR;
+        int rc;
+        cur_rm = rm;
+        rc = rexx_command((const char *)rm->rm_Args[0], &result);
+        cur_rm = NULL;
+        rm->rm_Result1 = rc;
         rm->rm_Result2 = 0;
-        if (ok && (rm->rm_Action & RXFF_RESULT) && RexxSysBase && result)
+        if (rc == 0 && (rm->rm_Action & RXFF_RESULT) && RexxSysBase && result)
             rm->rm_Result2 = (LONG)CreateArgstring((STRPTR)result, (LONG)strlen(result));
         ReplyMsg((struct Message *)rm);
     }
 }
 
-/* One OPENVIEW port at a time: a second viewer runs without one. */
-static void rexx_open(void)
+/* A named port of ours, or NULL when the name is taken. */
+static struct MsgPort *port_add(const char *name)
 {
-    struct MsgPort *port;
-    if (!RexxSysBase)
-        return;
-    port = CreateMsgPort();
+    struct MsgPort *port = CreateMsgPort();
     if (!port)
-        return;
-    port->mp_Node.ln_Name = (char *)REXX_NAME;
+        return NULL;
+    port->mp_Node.ln_Name = (char *)name;
     port->mp_Node.ln_Pri = 0;
     Forbid();
-    if (FindPort((STRPTR)REXX_NAME)) {
+    if (FindPort((STRPTR)name)) {
         Permit();
         DeleteMsgPort(port);
-        return;
+        return NULL;
     }
     AddPort(port);
     Permit();
-    A.rexxport = port;
+    return port;
 }
 
-static void rexx_close(void)
+/* OPENVIEW: one at a time, the first viewer's. MULTIVIEW.n (n from 1, the first free) or PORTNAME: every viewer's own,
+ * the names MultiView's callers use. */
+static void rexx_open(void)
+{
+    int n;
+    if (!RexxSysBase)
+        return;
+    A.rexxport = port_add(REXX_NAME);
+    if (A.opt.portname[0]) {
+        copystr(A.mvname, sizeof(A.mvname), A.opt.portname);
+        A.mvport = port_add(A.mvname);
+    } else {
+        for (n = 1; n < 100 && !A.mvport; n++) {
+            snprintf(A.mvname, sizeof(A.mvname), "MULTIVIEW.%d", n);
+            A.mvport = port_add(A.mvname);
+        }
+    }
+}
+
+static void port_remove(struct MsgPort *port)
 {
     struct RexxMsg *rm;
-    if (!A.rexxport)
+    if (!port)
         return;
-    RemPort(A.rexxport);
-    while ((rm = (struct RexxMsg *)GetMsg(A.rexxport)) != NULL) {
+    RemPort(port);
+    while ((rm = (struct RexxMsg *)GetMsg(port)) != NULL) {
         rm->rm_Result1 = RC_FATAL;
         rm->rm_Result2 = 0;
         ReplyMsg((struct Message *)rm);
     }
-    DeleteMsgPort(A.rexxport);
+    DeleteMsgPort(port);
+}
+
+static void rexx_close(void)
+{
+    port_remove(A.rexxport);
     A.rexxport = NULL;
+    port_remove(A.mvport);
+    A.mvport = NULL;
 }
 
 /* ---- the window ------------------------------------------------------------- */
@@ -1317,6 +1635,7 @@ static int libraries(void)
 static void close_libraries(void)
 {
     if (RexxSysBase) CloseLibrary((struct Library *)RexxSysBase);
+    if (IconBase) CloseLibrary(IconBase);
     if (WorkbenchBase) CloseLibrary(WorkbenchBase);
     if (GadToolsBase) CloseLibrary(GadToolsBase);
     if (AslBase) CloseLibrary(AslBase);
@@ -1415,6 +1734,79 @@ static void handle_window(void)
     }
 }
 
+/* ---- MultiView's command line and tool types ---------------------------------- */
+
+static void options_defaults(Options *o)
+{
+    memset(o, 0, sizeof(*o));
+    o->fontsize = o->left = o->top = o->width = o->height = -1;
+}
+
+/* MultiView's template, read whole: FILE and the keywords OpenView honours are kept, the others (CLIPUNIT, SCREEN,
+ * BOOKMARK, BACKDROP, PRTUNIT, AUTORESIZE) are read and ignored. CLIPBOARD is read and answered in the status line. */
+static int options_from_cli(Options *o)
+{
+    LONG args[20];
+    struct RDArgs *rda;
+    memset(args, 0, sizeof(args));
+    rda = ReadArgs((STRPTR)MV_TEMPLATE, args, NULL);
+    if (!rda) {
+        PrintFault(IoErr(), (STRPTR)"OpenView");
+        return 0;
+    }
+    if (args[0] && ((char *)args[0])[0])
+        copystr(o->file, sizeof(o->file), (char *)args[0]);
+    o->clipboard = args[1] != 0;
+    if (args[4]) copystr(o->pubscreen, sizeof(o->pubscreen), (char *)args[4]);
+    o->requester = args[5] != 0;
+    if (args[7]) copystr(o->fontname, sizeof(o->fontname), (char *)args[7]);
+    if (args[8]) o->fontsize = *(LONG *)args[8];
+    o->window = args[10] != 0;
+    if (args[11]) copystr(o->portname, sizeof(o->portname), (char *)args[11]);
+    o->immediate = args[12] != 0;
+    o->repeat = args[13] != 0;
+    if (args[15]) o->left = *(LONG *)args[15];
+    if (args[16]) o->top = *(LONG *)args[16];
+    if (args[17]) o->width = *(LONG *)args[17];
+    if (args[18]) o->height = *(LONG *)args[18];
+    FreeArgs(rda);
+    return 1;
+}
+
+/* Started from Workbench with a project: its icon's tool types are MultiView's keywords too. */
+static void options_from_icon(Options *o, struct WBStartup *w)
+{
+    struct DiskObject *dobj;
+    BPTR old;
+    STRPTR *tt, v;
+    if (w->sm_NumArgs < 2 || !w->sm_ArgList[1].wa_Lock || !w->sm_ArgList[1].wa_Name || !w->sm_ArgList[1].wa_Name[0])
+        return;
+    if (!IconBase && !(IconBase = OpenLibrary((STRPTR)"icon.library", 36)))
+        return;
+    old = CurrentDir(w->sm_ArgList[1].wa_Lock);
+    dobj = GetDiskObject(w->sm_ArgList[1].wa_Name);
+    CurrentDir(old);
+    if (!dobj)
+        return;
+    tt = (STRPTR *)dobj->do_ToolTypes;
+    if (tt) {
+        if ((v = FindToolType(tt, (STRPTR)"PUBSCREEN"))) copystr(o->pubscreen, sizeof(o->pubscreen), (char *)v);
+        if ((v = FindToolType(tt, (STRPTR)"PORTNAME"))) copystr(o->portname, sizeof(o->portname), (char *)v);
+        if ((v = FindToolType(tt, (STRPTR)"FONTNAME"))) copystr(o->fontname, sizeof(o->fontname), (char *)v);
+        if ((v = FindToolType(tt, (STRPTR)"FONTSIZE"))) o->fontsize = strtol((char *)v, NULL, 10);
+        if ((v = FindToolType(tt, (STRPTR)"WINDOWLEFT"))) o->left = strtol((char *)v, NULL, 10);
+        if ((v = FindToolType(tt, (STRPTR)"WINDOWTOP"))) o->top = strtol((char *)v, NULL, 10);
+        if ((v = FindToolType(tt, (STRPTR)"WINDOWWIDTH"))) o->width = strtol((char *)v, NULL, 10);
+        if ((v = FindToolType(tt, (STRPTR)"WINDOWHEIGHT"))) o->height = strtol((char *)v, NULL, 10);
+        if (FindToolType(tt, (STRPTR)"IMMEDIATE")) o->immediate = 1;
+        if (FindToolType(tt, (STRPTR)"REPEAT")) o->repeat = 1;
+        if (FindToolType(tt, (STRPTR)"WINDOW")) o->window = 1;
+        if (FindToolType(tt, (STRPTR)"REQUESTER")) o->requester = 1;
+        if (FindToolType(tt, (STRPTR)"CLIPBOARD")) o->clipboard = 1;
+    }
+    FreeDiskObject(dobj);
+}
+
 static int viewer_main(int argc, char **argv)
 {
     ULONG winsig, appsig = 0, rexxsig = 0, sig;
@@ -1429,6 +1821,35 @@ static int viewer_main(int argc, char **argv)
     if (!libraries()) {
         fputs("OpenView: needs AmigaOS 3.0 or later (datatypes, GadTools)\n", stderr);
         goto out;
+    }
+    /* after the libraries: libnix's string functions use utility.library (a trap otherwise) */
+    options_defaults(&A.opt);
+    if (argc > 0) {
+        if (!options_from_cli(&A.opt)) {
+            rc = 10;
+            goto out;
+        }
+    } else {
+        struct WBStartup *w = (struct WBStartup *)argv;
+        if (w->sm_NumArgs > 1 && w->sm_ArgList[1].wa_Lock) {
+            BPTR old = CurrentDir(w->sm_ArgList[1].wa_Lock);
+            BPTR lock = Lock((STRPTR)w->sm_ArgList[1].wa_Name, ACCESS_READ);
+            CurrentDir(old);
+            if (lock) {
+                if (NameFromLock(lock, (STRPTR)A.opt.file, sizeof(A.opt.file)) == 0)
+                    A.opt.file[0] = 0;
+                UnLock(lock);
+            }
+        }
+        options_from_icon(&A.opt, w);
+    }
+    oap_gt_pubscreen = A.opt.pubscreen[0] ? A.opt.pubscreen : NULL;
+    if (A.opt.fontname[0]) {
+        size_t n = strlen(A.opt.fontname);
+        snprintf(A.fontbuf, sizeof(A.fontbuf), "%.70s%s", A.opt.fontname,
+                 n > 5 && !strcasecmp(A.opt.fontname + n - 5, ".font") ? "" : ".font");
+        A.fontattr.ta_Name = (STRPTR)A.fontbuf;
+        A.fontattr.ta_YSize = A.opt.fontsize > 0 ? (UWORD)A.opt.fontsize : 8;
     }
     if (!oap_gt_open(&A.g))
         goto out;
@@ -1447,8 +1868,10 @@ static int viewer_main(int argc, char **argv)
         LayoutMenus(A.menu, A.g.vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
     A.win = OpenWindowTags(NULL,
         WA_Title, (ULONG)"OpenView", WA_ScreenTitle, (ULONG)"OpenView: open, look, print",
-        WA_PubScreen, (ULONG)A.g.screen, WA_InnerWidth, iw, WA_InnerHeight, ih,
-        WA_Left, (A.g.screen->Width - iw) / 2, WA_Top, (A.g.screen->Height - ih) / 2,
+        WA_PubScreen, (ULONG)A.g.screen,
+        A.opt.width > 0 ? TAG_IGNORE : WA_InnerWidth, iw, A.opt.height > 0 ? TAG_IGNORE : WA_InnerHeight, ih,
+        A.opt.width > 0 ? WA_Width : TAG_IGNORE, (ULONG)A.opt.width, A.opt.height > 0 ? WA_Height : TAG_IGNORE, (ULONG)A.opt.height,
+        WA_Left, A.opt.left >= 0 ? A.opt.left : (A.g.screen->Width - iw) / 2, WA_Top, A.opt.top >= 0 ? A.opt.top : (A.g.screen->Height - ih) / 2,
         WA_Activate, TRUE, WA_DragBar, TRUE, WA_CloseGadget, TRUE, WA_DepthGadget, TRUE, WA_SizeGadget, TRUE,
         WA_SizeBBottom, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE, WA_AutoAdjust, TRUE,
         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MOUSEMOVE | IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW |
@@ -1459,6 +1882,8 @@ static int viewer_main(int argc, char **argv)
         goto out;
     WindowLimits(A.win, 2 * side_width() + 160 + A.win->BorderLeft + A.win->BorderRight,
                  A.g.fh * 12 + 160 + A.win->BorderTop + A.win->BorderBottom, ~0, ~0);
+    A.normal_w = A.win->Width;
+    A.normal_h = A.win->Height;
     if (A.menu)
         SetMenuStrip(A.win, A.menu);
     if (WorkbenchBase && (A.appport = CreateMsgPort()) != NULL)
@@ -1469,23 +1894,22 @@ static int viewer_main(int argc, char **argv)
     oap_selection_open(&A.selection);
     A.running = 1;
 
-    if (argc > 1)
-        copystr(initial, sizeof(initial), argv[1]);
-    else if (argc == 0) {
-        struct WBStartup *w = (struct WBStartup *)argv;
-        if (w->sm_NumArgs > 1) {
-            NameFromLock(w->sm_ArgList[1].wa_Lock, (STRPTR)initial, sizeof(initial));
-            AddPart((STRPTR)initial, w->sm_ArgList[1].wa_Name, sizeof(initial));
-        }
-    }
+    copystr(initial, sizeof(initial), A.opt.file);
     if (initial[0])
         load_file(initial);
+    if (A.opt.clipboard)
+        status("OpenView does not show the Clipboard; open a file instead");
 
     winsig = 1UL << A.win->UserPort->mp_SigBit;
     if (A.appport)
         appsig = 1UL << A.appport->mp_SigBit;
     if (A.rexxport)
         rexxsig = 1UL << A.rexxport->mp_SigBit;
+    if (A.mvport)
+        rexxsig |= 1UL << A.mvport->mp_SigBit;
+    /* as MultiView: no file and no WINDOW, or REQUESTER, asks which file; Cancel leaves the window empty */
+    if ((!initial[0] && !A.opt.window && !A.opt.clipboard) || A.opt.requester)
+        action(B_OPEN, NULL);
     while (A.running) {
         sig = Wait(winsig | appsig | rexxsig | oap_selection_mask(&A.selection) | SIGBREAKF_CTRL_C);
         if (sig & appsig) {
@@ -1507,8 +1931,10 @@ static int viewer_main(int argc, char **argv)
         }
         if (sig & SIGBREAKF_CTRL_C)
             A.running = 0;
-        if (sig & rexxsig)
-            rexx_messages();
+        if (sig & rexxsig) {
+            rexx_messages(A.rexxport);
+            rexx_messages(A.mvport);
+        }
         if (sig & winsig)
             handle_window();
         if (A.refresh && A.dto) {

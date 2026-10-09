@@ -24,11 +24,16 @@ static void metrics(OAPGT *g)
     g->gad_h = g->fh + 6;
 }
 
+/* The public screen to open on (MultiView's PUBSCREEN); NULL or one that is not there: the default. */
+const char *oap_gt_pubscreen;
+
 int oap_gt_open(OAPGT *g)
 {
     struct TextFont *df;
     memset(g, 0, sizeof(*g));
-    g->screen = LockPubScreen(NULL);
+    g->screen = oap_gt_pubscreen ? LockPubScreen((STRPTR)oap_gt_pubscreen) : NULL;
+    if (!g->screen)
+        g->screen = LockPubScreen(NULL);
     if (!g->screen)
         return 0;
     g->vi = GetVisualInfo(g->screen, TAG_DONE);

@@ -16,8 +16,10 @@ documents over IPP, and saves documents as PDF files on the Amiga.
 
 - OpenPrint: one Print window for any document, with printer, copies, range,
   paper and orientation.
-- OpenView: opens pictures and documents through datatypes, lays them out on
-  the page and hands them to the Print window.
+- OpenView: opens whatever a datatype reads (pictures, text, AmigaGuide,
+  documents, sounds, animations), lays pictures out on the page and hands
+  them to the Print window. It takes MultiView's command line and ARexx
+  commands, so OpenUp installs it as SYS:Utilities/MultiView.
 - Printers and Queue: finds the printers on the network (DNS-SD/mDNS), keeps
   the ones you use, and shows the print queue.
 - A printer driver and oapspool.device, so any program that prints through
