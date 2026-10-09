@@ -86,6 +86,14 @@ python3 tools/make_package.py --lha-module ~/AmigaChrome/scripts
 
 `build/package/OpenPrint` is a drawer to copy to the Amiga; `build/package/OpenPrint.lha` is the same as one archive (`--lha-module` names the folder with AmigaChrome's `lha_archive.py`; without it only the drawer is made). On the Amiga, double-click **Install OpenPrint** (it runs SYS:System/Installer on OS 3.2, C:Installer elsewhere). It installs the five commands in C:, `oapspool.device` in DEVS:, the printer driver in DEVS:Printers, the spooler in WBStartup if you want it, and an OpenPrint drawer (SYS:Utilities by default) with OpenView, Printers and Queue, a test picture and a test page. The script is `package/Install-OpenPrint`.
 
+## OpenView as MultiView (OpenView 0.5)
+
+OpenView shows what a datatype reads; no file kind is named in it. OpenUp 0.7.2 installs it at `SYS:Utilities/MultiView`, keeping the original in `SYS:Storage/OpenUp-Superseded`, so everything that runs MultiView runs OpenView.
+
+- **Command line:** MultiView 47's template, word for word: `FILE,CLIPBOARD/S,CLIPUNIT/K/N,SCREEN/S,PUBSCREEN/K,REQUESTER/S,BOOKMARK/S,FONTNAME/K,FONTSIZE/K/N,BACKDROP/S,WINDOW/S,PORTNAME/K,IMMEDIATE/S,REPEAT/S,PRTUNIT/K/N,WINDOWLEFT/K/N,WINDOWTOP/K/N,WINDOWWIDTH/K/N,WINDOWHEIGHT/K/N,AUTORESIZE/S`. Honoured: FILE, PUBSCREEN, REQUESTER, FONTNAME, FONTSIZE, WINDOW, PORTNAME, IMMEDIATE, REPEAT, WINDOWLEFT/TOP/WIDTH/HEIGHT. Read and ignored: CLIPUNIT, SCREEN, BOOKMARK, BACKDROP, PRTUNIT, AUTORESIZE. CLIPBOARD is read and said so in the status line (OpenView does not show the Clipboard). With no FILE and no WINDOW, a file requester opens first, as MultiView's does. Started from Workbench, the project icon's tool types are read as the same keywords.
+- **ARexx:** each viewer has a port `MULTIVIEW.n` (n from 1, the first free) or the PORTNAME, as MultiView's windows have, as well as `OPENVIEW` (the first viewer). MultiView's commands answer: OPEN [NAME], RELOAD, PRINT, ABOUT, QUIT, GETFILEINFO, GETCURRENTDIR, GETOBJECTINFO (VAR or STEM), GETTRIGGERINFO, DOTRIGGERMETHOD, MINIMUMSIZE, NORMALSIZE, MAXIMUMSIZE, WINDOWTOFRONT, WINDOWTOBACK, SCREENTOFRONT, SCREENTOBACK, ACTIVATEWINDOW, BEEPSCREEN, CLEARSELECTED, SCREEN, PUBSCREEN. COPY, PASTE and SAVEAS return 5 (not supported; SAVEPDF saves a picture as PDF). An unknown command returns 10 (MultiView returns 0).
+- **Not the same:** AmigaGuide `system` and `rx` links stay switched off (AGA_Secure); a file over 64 MiB or a picture over 16 megapixels is refused; Clipboard viewing, Save as in the file's own format and block selection are not there; after a link into another AmigaGuide file the title and GETFILEINFO still name the first file.
+
 ## First-light Amiga installation
 
 Copy:
