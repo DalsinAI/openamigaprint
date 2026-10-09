@@ -21,7 +21,8 @@ C:OpenPrint
     |
     +-- Save PDF
     +-- native Amiga print window
-    +-- IPP over bsdsocket.library
+    +-- IPP and IPPS over bsdsocket.library
+           (IPPS: opentls.library or AmiSSL 5)
 ```
 
 There is no AmigaChrome dependency in the core stack.
@@ -37,6 +38,7 @@ Implemented and building for 68000-class AmigaOS 3.x:
 - native GadTools/ASL print window;
 - Save PDF;
 - plain `ipp://` Print-Job submission through `bsdsocket.library`;
+- `ipps://` (IPP over TLS, 9 October 2026): TLS on the same socket through opentls.library or AmiSSL 5, with SNI, certificate and host-name checks, a "Trust this printer?" question for a printer's own certificate, remembered per printer by its fingerprint, and HTTP Basic and Digest logins sent only over a trusted TLS connection (see [IPPS](#ipps-ipp-over-tls));
 - copies, A4/Letter, portrait/landscape, colour/mono, duplex and page-range IPP attributes;
 - host IPP/PDF codec tests;
 - Amiga spool and printer.device smoke-test programs.
@@ -49,7 +51,8 @@ The following are intentionally not claimed by first light:
 - real PDF page rendering inside the preview pane;
 - fully qualified native discovery on all target TCP/IP stacks;
 - capability negotiation beyond the PDF/accepting-jobs gate;
-- IPPS/TLS;
+- a password question for printers that ask for a login (logins are kept in `ENVARC:OpenPrint/Logins` for now), and Digest with SHA-256;
+- TLS 1.3 over opentls.library (version 1 speaks TLS 1.2; it comes with the library);
 - PWG Raster fallback for printers that do not accept PDF;
 - complete mapping of every classic text-style command;
 - broad application compatibility testing;
@@ -108,15 +111,38 @@ Run `OAPStatusTest` first to verify the virtual port reports ready with paper-ou
 The generated PDF is spooled under `T:OpenPrint-job-XXXX.pdf`; once `%%EOF` is received, `oapspool.device` launches `C:OpenPrint` asynchronously.
 ## Network model
 
-The current first-light client accepts a manual URI such as:
+The client takes printer addresses such as:
 
 ```
+ipps://printer.local/ipp/print
 ipp://192.168.1.50:631/ipp/print
 ```
 
-Networking is exclusively through the public `bsdsocket.library` API. Roadshow, AmiTCP, Miami, Genesis, ACNet or another compatible provider can supply that API.
+Port 631 is the default for both. Networking is exclusively through the public `bsdsocket.library` API. Roadshow, AmiTCP, Miami, Genesis, ACNet or another compatible provider can supply that API. A printer's own `.local` name is resolved with one multicast DNS question when the stack can't resolve it.
 
-Plain IPP is first light. IPPS will be added behind a TLS abstraction rather than making one network stack mandatory.
+## IPPS (IPP over TLS)
+
+IPPS sits behind a TLS abstraction (`include/oap_tls.h`), so no one TLS library is mandatory, and plain `ipp://` needs no TLS library at all. The programs that talk to printers (`C:OAPDiscover` and `C:OAVWorker`) try, in each run:
+
+1. **opentls.library** (OpenTLS, on BearSSL; MIT licensed and free; API version 1), from DalsinAI/openamigatls. Its headers are in `third_party/opentls`; the library is opened at run time.
+2. **AmiSSL 5**, when the build had its SDK (`AMISSL`, see `scripts/tls-flags.sh`). AmiSSL is opened at run time too.
+
+Without either, an `ipps://` printer says so in words ("This printer uses IPPS (encrypted IPP), which needs opentls.library or AmiSSL 5..."), and nothing is sent. `ENV:OpenPrint/TLS` set to `opentls`, `amissl` or `none` limits a run to one, for testing.
+
+**Choosing it.** Printers and Queue lists a printer that offers both `ipp://` and `ipps://` once, by `ipps://` when this Amiga has a TLS library. The address field starts with `ipps://`, and `ipp://` addresses work as before. The Print requester shows an `ipps://` printer as encrypted, and offers it once its certificate is accepted.
+
+**Certificates.** TLS goes over the same socket, with the printer's name in SNI. A certificate is accepted when an authority the TLS library trusts signed it for the printer's name, or when it is the one the user chose to trust for that printer. Most printers make their own certificate, so the second is the usual case:
+
+- the check in Printers and Queue still reads what the printer can do, and shows "Trust it to use it";
+- **Use for printing** shows the certificate's fingerprint (SHA-256) and who it is issued to, and asks "Trust this printer?" ("Don't trust it" comes first);
+- the answer is remembered in `ENVARC:OpenPrint/TrustedPrinters`, one line per printer (`host:port`, the fingerprint, the name);
+- from then on that certificate, and only that one, is accepted for that printer. A different certificate is "Certificate changed since you trusted it": nothing is printed until the user looks at it and trusts the new one.
+
+A certificate for another name, out of date (check the Amiga's clock), or unreadable is refused. A print job, or a password, only ever goes over a connection whose certificate was accepted.
+
+**Logins.** A printer that answers 401 gets HTTP Basic or Digest (MD5), only over `ipps://` with an accepted certificate; over plain `ipp://` OpenPrint refuses to send a password and says to use the printer's `ipps://` address. The logins are in `ENVARC:OpenPrint/Logins`, one line per printer: `host:port`, a tab, the user name, a tab, the password (kept as plain text, as Amiga programs do; use a login for printing only). A 401 means the printer did not take the job, so the job is sent once more with the login; any other lost answer stays "uncertain" and is never resent by itself.
+
+**Testing.** `make test-ipps` (`tests/host/test_ipps.sh`) runs OpenPrint's own connection, TLS, IPP and Print-Job code on x86 or ARM64 cores against printers on 127.0.0.1 only: CUPS's `ippeveprinter` with its own certificate, a second one with a certificate from a test authority, and a small printer that asks for a login (`tests/host/auth_printer.py`). It runs both backends: OpenSSL in place of AmiSSL, and OpenTLS, either its own code built for the host (`OPENTLS=` an openamigatls checkout with `build-host/` built) or its calls on OpenSSL (`tests/host/opentls_host.c`). `C:OAPIPPSTest` (`query`, `print`, `trust`) is the same tool for the Amiga.
 
 ## Licence
 

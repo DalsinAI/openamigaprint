@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
 /* Bounded DNS-SD/IPP codec. Network labels remain wire encoded. */
 #include "oap_discovery.h"
+#include "oap_tls.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,11 +47,32 @@ int oap_ipp_parse_caps(const unsigned char *p,size_t n,uint32_t id,OAPCaps *out)
  else if(eq(name,"sides-supported")&&tag==0x44&&b>=10&&memcmp(v,"two-sided-",10)==0)c.duplex=1;
  else if(eq(name,"printer-state-reasons")&&tag==0x44){size_t used=strlen(c.reasons);if(used+2<sizeof(c.reasons)){if(used){c.reasons[used++]=',';c.reasons[used++]=' ';}text(c.reasons+used,sizeof(c.reasons)-used,v,b);}}
  }return 0;}
-int oap_pdf_eligible(const OAPDiscovered *p){return p&&p->alive&&!p->secure&&p->uri[0]&&p->caps.pdf==OAP_PDF_YES;}
+/* Verified to take PDF; over ipps:// also with a certificate accepted. */
+int oap_pdf_eligible(const OAPDiscovered *p){return p&&p->alive&&p->uri[0]&&p->caps.pdf==OAP_PDF_YES&&(!p->secure||p->cert==OAP_CERT_OK||p->cert==OAP_CERT_TRUSTED);}
+/* The instance's own label (the part before ._ipp._tcp or ._ipps._tcp). */
+static int same_instance(const OAPDiscovered *a,const OAPDiscovered *b)
+{
+    size_t i,n=a->service.wire[0];
+    if(!a->service.len||!b->service.len||n!=b->service.wire[0])return 0;
+    for(i=1;i<=n;i++)if(tolower(a->service.wire[i])!=tolower(b->service.wire[i]))return 0;
+    return a->target.len&&nameeq(&a->target,&b->target);
+}
+void oap_discovery_prefer(OAPDiscovery *d,int secure_ok)
+{
+    size_t i,j;
+    for(i=0;i<d->count;i++)
+        for(j=0;j<d->count;j++){
+            OAPDiscovered *a=&d->printers[i],*b=&d->printers[j];
+            if(!a->alive||!b->alive||a->secure||!b->secure||!same_instance(a,b))continue;
+            if(secure_ok)a->alive=0;else b->alive=0;
+        }
+}
 static void safe_field(FILE *f,const char *s){while(*s){unsigned char c=(unsigned char)*s++;fputc(c<32||c==127?' ':c,f);}}
-int oap_discovery_save(const char *path,const OAPDiscovery *d,int done,const char *note){char tmp[768];FILE *f;size_t i;if(strlen(path)+5>=sizeof(tmp))return 0;snprintf(tmp,sizeof(tmp),"%s.tmp",path);f=fopen(tmp,"w");if(!f)return 0;fprintf(f,"OAPB1\t%d\t",done);safe_field(f,note);fputc('\n',f);for(i=0;i<d->count;i++){const OAPDiscovered *p=&d->printers[i];if(!p->alive)continue;fprintf(f,"P\t%d\t%d\t%d\t",p->caps.pdf,p->caps.accepting,p->secure);safe_field(f,p->caps.model[0]?p->caps.model:p->label);fputc('\t',f);safe_field(f,p->uri);fputc('\t',f);safe_field(f,p->note);fputc('\n',f);}{int bad=ferror(f);if(fclose(f))bad=1;if(bad){remove(tmp);return 0;}}
+int oap_discovery_save(const char *path,const OAPDiscovery *d,int done,const char *note){char tmp[768];FILE *f;size_t i;if(strlen(path)+5>=sizeof(tmp))return 0;snprintf(tmp,sizeof(tmp),"%s.tmp",path);f=fopen(tmp,"w");if(!f)return 0;fprintf(f,"OAPB1\t%d\t",done);safe_field(f,note);fputc('\n',f);for(i=0;i<d->count;i++){const OAPDiscovered *p=&d->printers[i];if(!p->alive)continue;fprintf(f,"P\t%d\t%d\t%d\t",p->caps.pdf,p->caps.accepting,p->secure);safe_field(f,p->caps.model[0]?p->caps.model:p->label);fputc('\t',f);safe_field(f,p->uri);fputc('\t',f);safe_field(f,p->note);fputc('\n',f);if(p->secure&&p->cert){fprintf(f,"C\t%d\t",p->cert);safe_field(f,p->fingerprint);fputc('\t',f);safe_field(f,p->cert_subject);fputc('\n',f);}}{int bad=ferror(f);if(fclose(f))bad=1;if(bad){remove(tmp);return 0;}}
 #ifdef __amigaos__
  remove(path);
 #endif
  if(rename(tmp,path)){remove(tmp);return 0;}return 1;}
-int oap_discovery_load(const char *path,OAPDiscovery *d,int *done,char *note,size_t cap){FILE *f;char line[1600];size_t count=0;f=fopen(path,"r");if(!f)return 0;if(!fgets(line,sizeof(line),f)||strncmp(line,"OAPB1\t",6)){fclose(f);return 0;}*done=atoi(line+6);{char *p=strchr(line+6,'\t');if(p){p++;p[strcspn(p,"\r\n")]=0;text(note,cap,(unsigned char *)p,strlen(p));}}memset(d,0,sizeof(*d));while(count<OAP_DISC_MAX&&fgets(line,sizeof(line),f)){char *parts[7],*p=line;int j;for(j=0;j<7;j++){parts[j]=p;p=strchr(p,'\t');if(j<6&&!p)break;if(p)*p++=0;}if(j<7||strcmp(parts[0],"P"))continue;{OAPDiscovered *e=&d->printers[count++];e->alive=1;e->caps.pdf=atoi(parts[1]);e->caps.accepting=atoi(parts[2]);e->secure=atoi(parts[3]);text(e->label,sizeof(e->label),(unsigned char *)parts[4],strlen(parts[4]));text(e->uri,sizeof(e->uri),(unsigned char *)parts[5],strlen(parts[5]));parts[6][strcspn(parts[6],"\r\n")]=0;text(e->note,sizeof(e->note),(unsigned char *)parts[6],strlen(parts[6]));}}d->count=count;fclose(f);return 1;}
+int oap_discovery_load(const char *path,OAPDiscovery *d,int *done,char *note,size_t cap){FILE *f;char line[1600];size_t count=0;f=fopen(path,"r");if(!f)return 0;if(!fgets(line,sizeof(line),f)||strncmp(line,"OAPB1\t",6)){fclose(f);return 0;}*done=atoi(line+6);{char *p=strchr(line+6,'\t');if(p){p++;p[strcspn(p,"\r\n")]=0;text(note,cap,(unsigned char *)p,strlen(p));}}memset(d,0,sizeof(*d));while(count<OAP_DISC_MAX&&fgets(line,sizeof(line),f)){char *parts[7],*p=line;int j;for(j=0;j<7;j++){parts[j]=p;p=strchr(p,'\t');if(j<6&&!p)break;if(p)*p++=0;}if(!strcmp(parts[0],"C")&&count&&j>=3){OAPDiscovered *e=&d->printers[count-1];e->cert=atoi(parts[1]);text(e->fingerprint,sizeof(e->fingerprint),(unsigned char *)parts[2],strlen(parts[2]));parts[3][strcspn(parts[3],"\r\n")]=0;text(e->cert_subject,sizeof(e->cert_subject),(unsigned char *)parts[3],strlen(parts[3]));continue;}
+ if(j<7||strcmp(parts[0],"P"))continue;
+ {OAPDiscovered *e=&d->printers[count++];e->alive=1;e->caps.pdf=atoi(parts[1]);e->caps.accepting=atoi(parts[2]);e->secure=atoi(parts[3]);text(e->label,sizeof(e->label),(unsigned char *)parts[4],strlen(parts[4]));text(e->uri,sizeof(e->uri),(unsigned char *)parts[5],strlen(parts[5]));parts[6][strcspn(parts[6],"\r\n")]=0;text(e->note,sizeof(e->note),(unsigned char *)parts[6],strlen(parts[6]));}}d->count=count;fclose(f);return 1;}

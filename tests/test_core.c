@@ -10,7 +10,10 @@ int main(void)
     OAPUri u; OAPJobOptions o; unsigned char b[2048]; size_t n=0;
     CHECK(oap_parse_ipp_uri("ipp://printer.local/ipp/print",&u)&&!strcmp(u.host,"printer.local")&&u.port==631&&!strcmp(u.path,"/ipp/print"),"parse default IPP URI");
     CHECK(oap_parse_ipp_uri("ipp://10.0.0.9:8631/printers/x",&u)&&u.port==8631&&!strcmp(u.path,"/printers/x"),"parse explicit port");
-    CHECK(!oap_parse_ipp_uri("ipps://printer/ipp/print",&u),"IPPS deliberately deferred");
+    CHECK(oap_parse_ipp_uri("ipps://printer/ipp/print",&u)&&u.secure&&u.port==631&&!strcmp(u.host,"printer")&&!strcmp(u.path,"/ipp/print"),"parse IPPS: port 631 by default");
+    CHECK(oap_parse_ipp_uri("ipps://10.0.0.9:443/ipp/print",&u)&&u.secure&&u.port==443,"parse IPPS with a port");
+    CHECK(oap_parse_ipp_uri("ipp://printer/ipp/print",&u)&&!u.secure,"plain IPP is not secure");
+    CHECK(!oap_parse_ipp_uri("https://printer/ipp/print",&u)&&!oap_parse_ipp_uri("ippsx://printer/",&u),"refuse other schemes");
     CHECK(oap_parse_ipp_uri("ipp://10.0.0.9",&u)&&u.port==631&&!strcmp(u.path,"/ipp/print"),"no path: the IPP Everywhere resource");
     CHECK(!oap_parse_ipp_uri("ipp://10.0.0.9:63x/ipp/print",&u),"refuse a port with letters");
     CHECK(!oap_parse_ipp_uri("ipp://10.0.0.9:/ipp/print",&u)&&!oap_parse_ipp_uri("ipp://10.0.0.9:70000/",&u),"refuse an empty or too large port");

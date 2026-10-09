@@ -32,7 +32,7 @@ static int query_one(const char *uri, const char *output)
         free(d);
         return 20;
     }
-    ok = oap_query_pdf(uri, &p->caps, p->note, sizeof(p->note));
+    ok = oap_query_found(p);
     oap_discovery_save(output, d, 1, p->note);
     printf("%s\n", p->note);
     oap_net_stop();
@@ -46,7 +46,7 @@ static int discover_main(int argc, char **argv)
         return oap_discover_run(argv[1]);
     if (argc == 4 && !strcmp(argv[1], "--query"))
         return query_one(argv[2], argv[3]);
-    fprintf(stderr, "Usage: OAPDiscover OUTPUT | OAPDiscover --query ipp://host:port/path OUTPUT\n");
+    fprintf(stderr, "Usage: OAPDiscover OUTPUT | OAPDiscover --query ipp[s]://host:port/path OUTPUT\n");
     return 20;
 }
 
