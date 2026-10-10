@@ -16,6 +16,7 @@
  * Sending stays with C:OAVWorker, and its rules stay: an upload whose outcome
  * is uncertain keeps Print disabled so a job is never sent twice. */
 #include "oap.h"
+#include "lastdir.h"
 #include "oap_discovery.h"
 #include "oap_gt.h"
 #include "oap_printers.h"
@@ -538,8 +539,10 @@ static int copy_file(const char *from, const char *to)
 static void save_pdf(void)
 {
     struct FileRequester *fr;
-    char path[512], text[sizeof(path) + 80];
+    char path[512], text[sizeof(path) + 80], last[512];
+    lastdir_get("OpenPrint-PDF", last, sizeof last);
     fr = (struct FileRequester *)AllocAslRequestTags(ASL_FileRequest, ASLFR_TitleText, (ULONG)"Save as PDF",
+                                                       ASLFR_InitialDrawer, (ULONG)last,
                                                        ASLFR_DoSaveMode, TRUE, ASLFR_InitialFile, (ULONG)base_name(R.pdf),
                                                        ASLFR_InitialPattern, (ULONG)"#?.pdf", ASLFR_DoPatterns, TRUE, TAG_END);
     if (!fr) {
@@ -548,6 +551,7 @@ static void save_pdf(void)
     }
     if (AslRequestTags(fr, ASLFR_Window, (ULONG)R.win, ASLFR_SleepWindow, TRUE, TAG_END)) {
         copy(path, sizeof(path), (const char *)fr->fr_Drawer);
+        lastdir_put("OpenPrint-PDF", (const char *)fr->fr_Drawer);
         AddPart((STRPTR)path, fr->fr_File, sizeof(path));
         if (copy_file(R.pdf, path)) {
             snprintf(text, sizeof(text), "Saved %s", path);
