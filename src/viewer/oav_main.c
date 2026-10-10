@@ -24,6 +24,7 @@
 #include "oap_printers.h"
 #include "oap_stack.h"
 #include "oap_str.h"
+#include "../ui/lastdir.h"
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <exec/ports.h>
@@ -66,7 +67,7 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *UtilityBase, *DataTypesBase, *AslBase, *GadToolsBase, *WorkbenchBase, *IconBase;
 struct RxsLib *RexxSysBase;
-static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.5 (9.10.2026)";
+static const char oap_version[] __attribute__((used)) = "$VER: OpenView 0.5.1 (10.10.2026)";
 
 #define MAX_JOBS 128
 #define REXX_NAME "OPENVIEW"
@@ -547,13 +548,17 @@ static void reload(void)
 
 static int choose_file(char *path, int save)
 {
-    struct FileRequester *r = AllocAslRequestTags(ASL_FileRequest, ASLFR_Window, (ULONG)A.win,
+    static char last[OAV_PATH_MAX];
+    struct FileRequester *r;
+    lastdir_get("OpenView", last, sizeof last);     /* 0.5.1: where the last one was, else Work: */
+    r = AllocAslRequestTags(ASL_FileRequest, ASLFR_Window, (ULONG)A.win,
         ASLFR_TitleText, (ULONG)(save ? "Save PDF (new filename)" : "Open document, picture or animation"), ASLFR_DoSaveMode, save,
-        ASLFR_InitialDrawer, (ULONG)"Work:", ASLFR_InitialFile, (ULONG)(save ? "Picture.pdf" : ""), ASLFR_SleepWindow, TRUE, TAG_DONE);
+        ASLFR_InitialDrawer, (ULONG)(last[0] ? last : "Work:"), ASLFR_InitialFile, (ULONG)(save ? "Picture.pdf" : ""), ASLFR_SleepWindow, TRUE, TAG_DONE);
     int ok = 0;
     if (r) {
         if (AslRequestTags(r, TAG_DONE)) {
             copystr(path, OAV_PATH_MAX, (char *)r->fr_Drawer);
+            lastdir_put("OpenView", (const char *)r->fr_Drawer);
             if (AddPart((STRPTR)path, r->fr_File, OAV_PATH_MAX))
                 ok = 1;
         }
