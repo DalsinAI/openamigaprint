@@ -10,13 +10,19 @@
  *     Print requester offers them without a new search;
  *   - one queue for every job, from printer.device and OpenView alike;
  *   - menus with Amiga-key shortcuts, and a key on every button.
- * The lists use the system's fixed-width font so their columns line up.
+ * The lists use the screen's own text, as every other part of the window
+ * does: their columns are lined up by measuring it (0.4, 10 October 2026;
+ * they used the fixed system font before).
  * Network work stays with C:OAPDiscover; only printers verified to take PDF
  * can be used for printing. An ipps:// printer with its own certificate
  * (most printers make one) is trusted here, by asking: Use for printing
  * shows its fingerprint and asks "Trust this printer?", remembers the
  * answer (ENVARC:OpenPrint/TrustedPrinters), checks it again, and then
- * uses it. */
+ * uses it. That includes a certificate made for another name or with odd
+ * dates (most printers' are made for their own host name, not the .local
+ * one): trusted, it is pinned by its fingerprint, which takes the place of
+ * the name and dates for that printer only (0.4). Choosing a printer that
+ * isn't verified yet asks it what it can print. */
 #include "oap.h"
 #include "oap_discovery.h"
 #include "oap_gt.h"
@@ -49,10 +55,10 @@
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase;
-static const char oap_version[] __attribute__((used)) = "$VER: OAPPrinters 0.3 (4.10.2026)";
+static const char oap_version[] __attribute__((used)) = "$VER: OAPPrinters 0.4 (10.10.2026)";
 
 #define QUEUE_MAX 48
-#define ROW_MAX 200
+#define ROW_MAX 400
 
 enum {
     G_PRINTERS = 1, G_SEARCH, G_SHOWALL, G_USE, G_TEST, G_ADDRESS, G_CHECK, G_DETAILS, G_URI,
@@ -161,16 +167,42 @@ static int run_async(const char *cmd)
 }
 
 /* A row of columns, each cut or padded to its width in characters. */
+/* The width of text in the window's own (proportional) font. */
+static struct RastPort measure_rp;
+static int measure_ready;
+static int text_px(const char *s, int n)
+{
+    WORD px;
+    if (!measure_ready) {
+        InitRastPort(&measure_rp);
+        measure_ready = 1;
+    }
+    SetFont(&measure_rp, P.g.font);
+    px = TextLength(&measure_rp, (STRPTR)s, n);
+    return px;
+}
+
+/* One row of columns in the window's font: widths are in characters of the
+ * fixed font (as layout() works them out), turned into pixels; each cell is
+ * cut to its column and the next starts at its pixel, padded with spaces. */
 static void columns(char *out, size_t cap, const int *widths, int n, const char **cells)
 {
     size_t used = 0;
-    int c;
+    int c, end = 0, gap = 6;
     out[0] = 0;
     for (c = 0; c < n && used + 1 < cap; c++) {
-        int w = widths[c], i;
         const char *s = cells[c] ? cells[c] : "";
-        for (i = 0; i < w && used + 1 < cap; i++)
-            out[used++] = (i < w - 1 && *s) ? *s++ : ' ';
+        end += widths[c] * P.g.fixed_w;
+        while (*s && used + 1 < cap) {
+            out[used] = *s;
+            if (c < n - 1 && text_px(out, (int)used + 1) > end - gap)
+                break;
+            used++;
+            s++;
+        }
+        if (c < n - 1)
+            while (used + 1 < cap && text_px(out, (int)used) < end)
+                out[used++] = ' ';
     }
     while (used && out[used - 1] == ' ')
         used--;
@@ -193,7 +225,8 @@ static const char *state_word(const OAPPrinter *p)
         case OAP_CERT_NOTLS: return "Needs opentls.lib";
         case OAP_CERT_ASK: return p->pdf == OAP_PDF_YES ? "Trust it to use it" : "Not verified";
         case OAP_CERT_CHANGED: return "Certificate changed";
-        case OAP_CERT_NAME: case OAP_CERT_DATES: case OAP_CERT_BAD: return "Certificate problem";
+        case OAP_CERT_NAME: case OAP_CERT_DATES: return p->pdf == OAP_PDF_YES ? "Trust it to use it" : "Certificate problem";
+        case OAP_CERT_BAD: return "Certificate problem";
         }
     }
     if (p->pdf == OAP_PDF_YES)
@@ -206,7 +239,8 @@ static const char *state_word(const OAPPrinter *p)
 /* Its certificate asks the user before it can be used. */
 static int needs_trust(const OAPPrinter *p)
 {
-    return oap_printer_is_secure(p) && (p->cert == OAP_CERT_ASK || p->cert == OAP_CERT_CHANGED) && p->fingerprint[0];
+    return oap_printer_is_secure(p) && p->fingerprint[0] &&
+           (p->cert == OAP_CERT_ASK || p->cert == OAP_CERT_CHANGED || p->cert == OAP_CERT_NAME || p->cert == OAP_CERT_DATES);
 }
 
 static OAPPrinter *selected_printer(void)
@@ -422,6 +456,18 @@ static int ask_trust(OAPPrinter *p)
                  "Compare it with the one on the printer's own status\n"
                  "page or panel. Trust the new certificate?",
                  p->name, u.host, fp1, fp2);
+    else if (p->cert == OAP_CERT_NAME || p->cert == OAP_CERT_DATES)
+        snprintf(body, sizeof(body),
+                 "%.60s (%.80s) has a certificate %s.\n"
+                 "Most printers do: they make their own, for the name\n"
+                 "they were given, not the one this network finds.\n\n"
+                 "Issued to: %.60s\n"
+                 "Fingerprint (SHA-256):\n%s\n%s\n\n"
+                 "If it matches the one on the printer's own status page\n"
+                 "or panel, trust it: OpenPrint then prints to it\n"
+                 "encrypted, and refuses any other certificate for it.",
+                 p->name, u.host, p->cert == OAP_CERT_NAME ? "made for another name" : "outside its dates",
+                 p->cert_subject[0] ? p->cert_subject : "(no name)", fp1, fp2);
     else
         snprintf(body, sizeof(body),
                  "%.60s (%.80s) proves who it is with its own\n"
@@ -649,7 +695,7 @@ static void layout(int iw, int ih)
 {
     OAPGT *g = &P.g;
     Geo *G = &P.geo;
-    int gh = g->gad_h, fl = g->fixed->tf_YSize, right_h, chars, rest;
+    int gh = g->gad_h, fl = g->font->tf_YSize, right_h, chars, rest;
     G->lx = OAP_GT_MARGIN;
     G->ly = OAP_GT_MARGIN;
     G->lw = (iw - 2 * OAP_GT_MARGIN - OAP_GT_GAP) * 58 / 100;
@@ -692,7 +738,7 @@ static void natural_size(void)
         right = w;
     P.nat_w = 2 * OAP_GT_MARGIN + OAP_GT_GAP + (left * 100 / 58 > left + right ? left * 100 / 58 : left + right);
     layout(P.nat_w, 1000);
-    P.nat_h = P.geo.qy - 0 + g->fh + OAP_GT_GAP + g->fixed->tf_YSize + 2 + 5 * g->fixed->tf_YSize + 4 +
+    P.nat_h = P.geo.qy - 0 + g->fh + OAP_GT_GAP + g->font->tf_YSize + 2 + 5 * g->font->tf_YSize + 4 +
               OAP_GT_GAP + g->gad_h + OAP_GT_GAP + OAP_GT_GAP + g->gad_h + OAP_GT_MARGIN;
 }
 
@@ -708,7 +754,7 @@ static void build(void)
     p = CreateContext(&P.glist);
     /* printers */
     p = CreateGadget(LISTVIEW_KIND, p, oap_gt_ng(g, bx + G->lx + OAP_GT_INSET, by + G->plv_y, G->lw - 2 * OAP_GT_INSET, G->plv_h,
-                     NULL, G_PRINTERS, 0, 1), GTLV_Labels, (ULONG)&P.printer_rows, GTLV_ShowSelected, 0UL,
+                     NULL, G_PRINTERS, 0, 0), GTLV_Labels, (ULONG)&P.printer_rows, GTLV_ShowSelected, 0UL,
                      GTLV_Selected, (ULONG)P.sel_printer, TAG_DONE);
     bw = oap_gt_text_w(g, "_Search again") + 16;
     p = CreateGadget(CHECKBOX_KIND, p, oap_gt_ng(g, bx + G->lx + OAP_GT_INSET, by + G->y_check + (gh - 11) / 2, 26, 11,
@@ -740,7 +786,7 @@ static void build(void)
     }
     /* the queue */
     cw = iw - 2 * OAP_GT_MARGIN - 2 * OAP_GT_INSET;
-    p = CreateGadget(LISTVIEW_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN + OAP_GT_INSET, by + G->qlv_y, cw, G->qlv_h, NULL, G_QUEUE, 0, 1),
+    p = CreateGadget(LISTVIEW_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN + OAP_GT_INSET, by + G->qlv_y, cw, G->qlv_h, NULL, G_QUEUE, 0, 0),
                      GTLV_Labels, (ULONG)&P.queue_rows, GTLV_ShowSelected, 0UL, GTLV_Selected, (ULONG)P.sel_job, TAG_DONE);
     bw = (cw - 2 * OAP_GT_GAP) / 3;
     {
@@ -762,10 +808,10 @@ static void header(int x, int y, const int *widths, int n, const char **titles)
     char text[ROW_MAX];
     struct RastPort *rp = P.win->RPort;
     columns(text, sizeof(text), widths, n, titles);
-    SetFont(rp, P.g.fixed);
+    SetFont(rp, P.g.font);
     SetAPen(rp, oap_gt_pen(&P.g, HIGHLIGHTTEXTPEN));
     SetDrMd(rp, JAM1);
-    Move(rp, x + 4, y + P.g.fixed->tf_Baseline);
+    Move(rp, x + 4, y + P.g.font->tf_Baseline);
     Text(rp, (STRPTR)text, strlen(text));
     SetFont(rp, P.g.font);
 }
@@ -778,7 +824,7 @@ static void draw_static(void)
     Geo *G = &P.geo;
     struct RastPort *rp = P.win->RPort;
     int bx = P.win->BorderLeft, by = P.win->BorderTop, iw = P.win->Width - P.win->BorderLeft - P.win->BorderRight;
-    int fl = g->fixed->tf_YSize;
+    int fl = g->font->tf_YSize;
     oap_gt_group(g, rp, bx + G->lx, by + G->ly, G->lw, G->lh, "Printers on the network");
     header(bx + G->lx + OAP_GT_INSET, by + G->plv_y - fl - 2, G->pcols, 3, ptitles);
     oap_gt_group(g, rp, bx + G->rx, by + G->ly, G->rw, G->lh, "Selected printer");
@@ -831,10 +877,15 @@ static void action(ULONG id, UWORD code, int *done)
         fill_printers();
         break;
     }
-    case G_PRINTERS:
+    case G_PRINTERS: {
+        OAPPrinter *p;
         P.sel_printer = code;
         show_details();
+        p = selected_printer();
+        if (p && p->pdf == OAP_PDF_UNKNOWN && !P.scanning && !oap_printer_is_file(p) && p->uri[0])
+            begin_scan(p->uri);                /* not verified yet: ask it what it can print */
         break;
+    }
     case G_USE: case M_USE:
         use_printer();
         break;
@@ -915,7 +966,7 @@ static void key(UWORD code, int *done)
 
 static int printers_main(int argc, char **argv)
 {
-    int done = 0, rc = 20;
+    int done = 0, rc = 20, start_w, start_h;
     (void)argc;
     (void)argv;
 
@@ -939,10 +990,20 @@ static int printers_main(int argc, char **argv)
     P.menu = CreateMenus(menus, TAG_DONE);
     if (P.menu)
         LayoutMenus(P.menu, P.g.vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
+    /* The first size (the Team's rule for every Open app): 800 x 600, never larger than the screen below its
+     * title bar, and never smaller than what the window needs */
+    {
+        int sw = P.g.screen->Width, sh = P.g.screen->Height - (P.g.screen->BarHeight + 1);
+        start_w = (sw < 800 ? sw : 800) - 24;
+        start_h = (sh < 600 ? sh : 600) - 32;
+        if (start_w < P.nat_w) start_w = P.nat_w;
+        if (start_h < P.nat_h) start_h = P.nat_h;
+    }
     P.win = OpenWindowTags(NULL,
         WA_Title, (ULONG)"OpenPrint: Printers and Queue", WA_PubScreen, (ULONG)P.g.screen,
-        WA_InnerWidth, P.nat_w, WA_InnerHeight, P.nat_h,
-        WA_Left, (P.g.screen->Width - P.nat_w) / 2, WA_Top, (P.g.screen->Height - P.nat_h) / 2,
+        WA_InnerWidth, start_w, WA_InnerHeight, start_h,
+        WA_Left, (P.g.screen->Width - start_w - 24) / 2,
+        WA_Top, P.g.screen->BarHeight + 1 + (P.g.screen->Height - P.g.screen->BarHeight - 1 - start_h - 32) / 2,
         WA_Activate, TRUE, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SizeGadget, TRUE,
         WA_SizeBBottom, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE, WA_AutoAdjust, TRUE,
         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MENUPICK | IDCMP_VANILLAKEY |
@@ -951,7 +1012,7 @@ static int printers_main(int argc, char **argv)
         TAG_DONE);
     if (!P.win)
         goto out;
-    WindowLimits(P.win, P.win->Width, P.win->Height, ~0, ~0);
+    WindowLimits(P.win, P.nat_w + P.win->BorderLeft + P.win->BorderRight, P.nat_h + P.win->BorderTop + P.win->BorderBottom, ~0, ~0);
     if (P.menu)
         SetMenuStrip(P.win, P.menu);
     rebuild();
