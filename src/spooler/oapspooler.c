@@ -119,6 +119,20 @@ int main(void)
     AddPort(port);
     if(me)me->pr_WindowPtr=(APTR)-1;
     ensure_queue_dir();
-    for(;;){WaitPort(port);while((msg=GetMsg(port))!=NULL)handle((struct IOStdReq *)msg);}
+    /* Ctrl-C ends it (12 Oct 2026): OpenBench asks the programs it started from SYS:WBStartup to quit that way
+     * before it quits, as their code is its to unload, and a spooler that never ended kept OpenBench running.
+     * The port goes first, under Forbid as oapspool.device finds it, so no request comes after the last one is
+     * answered. A job not yet ended keeps its .pdf but gets no .job, so it isn't queued half written. */
+    for(;;){
+        ULONG sigs=Wait((1UL<<port->mp_SigBit)|SIGBREAKF_CTRL_C);
+        while((msg=GetMsg(port))!=NULL)handle((struct IOStdReq *)msg);
+        if(sigs&SIGBREAKF_CTRL_C)break;
+    }
+    Forbid();
+    RemPort(port);
+    Permit();
+    while((msg=GetMsg(port))!=NULL)handle((struct IOStdReq *)msg);
+    close_spool();
+    DeleteMsgPort(port);
     return 0;
 }

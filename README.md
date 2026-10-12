@@ -164,7 +164,7 @@ The printer driver is written from scratch against the published classic Amiga p
 
 OpenPrint now treats completed printer jobs as durable queue entries rather than transient one-shot files.
 
-- Install `OAPSpooler` as a Workbench-startup tool (`SYS:WBStartup/OAPSpooler`) with `DONOTWAIT`.
+- Install `OAPSpooler` as a Workbench-startup tool (`SYS:WBStartup/OAPSpooler`) with `DONOTWAIT`. Ctrl-C ends it (OpenBench asks with Ctrl-C when it quits).
 - The spooler stores completed jobs under `SYS:Spool/OpenPrint/` as a PDF spool artifact plus a `.job` metadata record.
 - Install `OpenPrint` plus `OpenPrintTool.info` as `SYS:Tools/OpenPrint` and `SYS:Tools/OpenPrint.info`. Double-click it, or run `OpenPrint` with no arguments (or `OpenPrint QUEUE`), to open the native queue window.
 - Selecting **Open** on a queued job opens the native per-job window, where the job can be saved/exported or sent to an IPP printer.
