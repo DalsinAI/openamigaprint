@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Deterministic transport tests: no sockets and no real printer jobs. */
 #include "oap.h"
 #include "oap_net.h"

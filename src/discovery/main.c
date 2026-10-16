@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* C:OAPDiscover: the network work of Printers and Queue, in a process of
  * its own. OAPDiscover OUTPUT searches the network; OAPDiscover --query
  * URI OUTPUT checks one printer by its address. Either writes what it

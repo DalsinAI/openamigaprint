@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* OpenView: open, look, print. GadTools owns the window (We, 4 October
  * 2026: OS 3.x applications use GadTools or MUI, not ReAction);
  * datatypes.library owns what is shown in it.

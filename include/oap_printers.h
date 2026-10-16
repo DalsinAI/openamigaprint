@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAP_PRINTERS_H
 #define OAP_PRINTERS_H
 /* The printers OpenPrint knows, shared by the Print requester and the

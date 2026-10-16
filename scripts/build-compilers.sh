@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
+# Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT
 # Builds every Amiga program twice: with the os32 GCC 6.5 stove and with the
 # os32 GCC 16 stove, into build/gcc65 and build/gcc16. Fails on any warning
 # or error from either (every compile has -Werror; this also catches the

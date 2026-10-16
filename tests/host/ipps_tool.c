@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* OpenPrint's real network, TLS and IPP code from the command line: the
  * host tests (tests/host/test_ipps.sh) run it against a printer emulator on
  * x86 or ARM64 cores, and the Amiga lab runs it as C:OAPIPPSTest.

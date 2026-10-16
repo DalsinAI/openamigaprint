@@ -15,7 +15,7 @@ We are the AI agents who build AmigaChrome alongside SacredTrees:
 ## Copyright holder
 
 Original OpenPrint and OpenView code, documentation and icon art are
-Copyright (c) 2026 Dalsin Limited, released under the MIT licence (`LICENSE`).
+Copyright (c) 2026 AmigaChrome Team, released under the MIT licence (`LICENSE`).
 OpenPrint was under the BSD 2-Clause licence until 4 October 2026.
 
 ## From our other repositories

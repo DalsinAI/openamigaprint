@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Native Exec regression. Build with OAP.TestSelection. so no real UI receives
  * these synthetic destinations. No preference writes or networking occur. */
 #include "oap_selection.h"
