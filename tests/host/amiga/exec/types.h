@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Host tests only: the few AmigaOS types the OpenTLS headers use, so the
  * OpenTLS backend compiles on x86 or ARM64 cores against
  * tests/host/opentls_host.c. Not the NDK. */

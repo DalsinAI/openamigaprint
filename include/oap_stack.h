@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAP_STACK_H
 #define OAP_STACK_H
 /* Runs a program's body on a stack of at least `bytes`. The libnix these

@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Host tests only (see exec/types.h here): a hook is called directly. */
 #ifndef UTILITY_HOOKS_H
 #define UTILITY_HOOKS_H

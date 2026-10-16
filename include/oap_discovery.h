@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAP_DISCOVERY_H
 #define OAP_DISCOVERY_H
 #include <stddef.h>

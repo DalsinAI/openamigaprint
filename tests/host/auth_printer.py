@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
+# Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT
 """Host tests only: a tiny IPP printer on 127.0.0.1 that asks for a login.
 
     auth_printer.py PORT CERT KEY LOG [--plain] [--basic]

@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAV_JOBS_H
 #define OAV_JOBS_H
 #include "oav_core.h"

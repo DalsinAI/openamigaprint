@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Bounded DNS-SD/IPP codec. Network labels remain wire encoded. */
 #include "oap_discovery.h"
 #include "oap_tls.h"

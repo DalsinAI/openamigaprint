@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Connections to printers (include/oap_net.h): a non-blocking TCP socket
  * whose every wait is bounded by select()/WaitSelect(), with TLS on the
  * same socket for ipps:// (include/oap_tls.h). */
