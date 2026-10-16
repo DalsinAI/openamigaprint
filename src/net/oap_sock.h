@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAP_SOCK_H
 #define OAP_SOCK_H
 /* Inside the network layer only: the socket calls of bsdsocket.library on

@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Printers' certificates the user chose to trust (include/oap_tls.h):
  * ENV:OpenPrint/TrustedPrinters and its ENVARC: copy, one line each:
  *   host:port <TAB> AB:CD:...(SHA-256) <TAB> who it is issued to

@@ -154,9 +154,9 @@ A certificate for another name, out of date (check the Amiga's clock), or unread
 
 ## Licence
 
-OpenPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 Dalsin Limited): anyone may use it, change it, fork it and ship it, commercially too. We, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
+OpenPrint is free software under the MIT licence (`LICENSE`, Copyright (c) 2026 AmigaChrome Team): anyone may use it, change it, fork it and ship it, commercially too. We, 4 October 2026: projects we call Open are MIT. It was BSD 2-Clause until then.
 
-The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenPrint by Dalsin Limited.
+The licence's one condition keeps the credit: the copyright notice and the licence text stay with every copy and fork. We also ask, as a courtesy rather than a condition, that a fork or a port say it is based on OpenPrint by the AmigaChrome Team.
 
 The printer driver is written from scratch against the published classic Amiga printer-driver ABI; AROS sources were used as behavioural reference, not copied into this tree.
 
@@ -178,4 +178,4 @@ The windows are GadTools (We, 4 October 2026: OS 3.x applications use GadTools o
 
 ## Contributors
 
-OpenPrint is created and maintained by [SacredTrees](https://github.com/SacredTrees) with the AmigaChrome agent team, copyright Dalsin Limited. Everyone whose work it includes is credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
+OpenPrint is created and maintained by [SacredTrees](https://github.com/SacredTrees) with the AmigaChrome agent team, copyright AmigaChrome Team. Everyone whose work it includes is credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).

@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* The printer chosen in Printers and Queue ("Use for printing"), for
  * OpenView: ENV:OpenPrint/PrinterURI, else its ENVARC: copy, else the
  * names used before 4 October 2026. */

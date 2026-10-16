@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* IPP over HTTP on an OAPConn: the POST, the bounded response, and
  * Get-Printer-Attributes (include/oap_net.h). */
 #include "oap_net.h"

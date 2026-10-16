@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
+// Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT
 // Turns OpenPrint's classic icons into OS 3.2-style ones (an OS 3.5 colour
 // icon with a classic fallback), keeping each icon's type, default tool,
 // tool types, stack and drawer window. Written by ACBuild's amiga-icon.js.
