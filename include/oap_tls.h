@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAP_TLS_H
 #define OAP_TLS_H
 /* OpenPrint's TLS abstraction: IPPS (IPP over TLS) without making one TLS

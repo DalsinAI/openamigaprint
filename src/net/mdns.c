@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* A .local name's IPv4 address by one multicast DNS question (RFC 6762
  * section 5.1, a one-shot query from an ephemeral port), for TCP/IP
  * stacks that do not resolve .local themselves. An ipps:// printer is

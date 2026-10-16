@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
+# Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT
 # IPPS end to end on x86 or ARM64 cores, with no internet: OpenPrint's own
 # connection, TLS, IPP and Print-Job code against printers on 127.0.0.1:
 #   - CUPS's ippeveprinter with its own self-signed certificate (as most

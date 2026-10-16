@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
+# Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT
 """OpenPrint's icon pictures in full colour, for OS 3.2-style icons.
 
     python3 tools/icon_art.py NAME OUT.rgba     NAME: printer viewer page pdf picture install

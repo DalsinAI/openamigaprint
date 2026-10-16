@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* The AmiSSL backend of the TLS abstraction (tls_backend.h): the OpenSSL 3
  * API, from AmiSSL 5 on AmigaOS (opened per task, over the task's own
  * bsdsocket.library) and from OpenSSL itself on x86 or ARM64 cores, where

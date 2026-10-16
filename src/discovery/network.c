@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* C:OAPDiscover's search: one-shot mDNS queries for IPP printers, then a
  * Get-Printer-Attributes check of each one found (oap_net.h). */
 #if !defined(__amigaos__) && !defined(_POSIX_C_SOURCE)

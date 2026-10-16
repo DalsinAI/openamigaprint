@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* IPP Print-Job of a PDF to an ipp:// or ipps:// printer (include/oap.h). */
 #include "oap.h"
 #include "oap_net.h"

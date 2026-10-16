@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* HTTP Basic and Digest (RFC 7617, RFC 7616 with MD5) for printers that
  * ask for a user name and password (include/oap_net.h). OpenPrint answers
  * them only on ipps:// connections whose certificate was accepted: a

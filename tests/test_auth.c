@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* Logins, remembered certificates and IPPS discovery: no network. */
 #include "oap_net.h"
 #include "oap_tls.h"

@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 /* The TLS abstraction (include/oap_tls.h): picks a backend, applies the
  * remembered certificates, and reads what a certificate says. */
 #include "oap_tls.h"

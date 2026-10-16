@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Dalsin Limited. SPDX-License-Identifier: MIT
+# Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT
 # Sourced by the build scripts: the TLS backends for the programs that talk
 # to printers (C:OAPDiscover and C:OAVWorker). Sets TLS_FLAGS and TLS_SOURCES.
 #   - OpenTLS (opentls.library, API 1): always; its headers are in
