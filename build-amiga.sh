@@ -5,9 +5,11 @@ CC=${AMIGA_CC:-$(command -v m68k-amigaos-gcc || echo m68k-amigaos-gcc)}   # set 
 OUT=${OAP_OUT:-"$ROOT/build/amigaos3"}   # set OAP_OUT to build elsewhere
 mkdir -p "$OUT"
 python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenPrintTool.info"
+# The 68040, soft float (one program for full and LC/EC 68040s): the specs
+# file links libnix's soft libm, not its FPU libm881.
 # Wall, Wextra and Werror on every 68k compile: the build is clean on GCC 6.5
 # and on GCC 16 (scripts/build-compilers.sh builds with both).
-APP='-m68000 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul'
+APP="-m68040 -specs=$ROOT/specs/m68k-soft-m68040.specs -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul"
 # What printers are reached by: the connection, IPP client and Print-Job.
 NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/ipp_submit.c $ROOT/src/net/http_auth.c $ROOT/src/net/mdns.c"
 . "$ROOT/scripts/tls-flags.sh"
@@ -20,7 +22,7 @@ NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/ipp_submit.c 
 file "$OUT/OpenPrint"
 wc -c "$OUT/OpenPrint"
 
-BARE="-m68000 -O2 -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin -Wall -Wextra -Werror -nostartfiles -nostdlib"
+BARE="-m68040 -O2 -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin -Wall -Wextra -Werror -nostartfiles -nostdlib"
 "$CC" $BARE -I"$ROOT/include" -o "$OUT/oapspool.device" "$ROOT/src/device/oapspool_device.c" -lgcc
 "$CC" $APP -I"$ROOT/include" \
   -o "$OUT/OAPSpooler" "$ROOT/src/spooler/oapspooler.c"
@@ -29,10 +31,10 @@ BARE="-m68000 -O2 -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-topl
 file "$OUT/oapspool.device" "$OUT/OAPSpooler" "$OUT/oapspooltest" "$OUT/oapstatustest"
 wc -c "$OUT/oapspool.device" "$OUT/OAPSpooler" "$OUT/oapspooltest" "$OUT/oapstatustest"
 
-"$CC" -m68000 -c -o "$OUT/printertag.o" "$ROOT/src/driver/printertag.s"
-"$CC" -m68000 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin -nostdlib -c -o "$OUT/openprint_driver.o"   "$ROOT/src/driver/openprint_driver.c"
-"$CC" -m68000 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -fomit-frame-pointer -fno-builtin -nostdlib -c -o "$OUT/oap_arith.o" "$ROOT/src/driver/arith.c"
-"$CC" -m68000 -nostartfiles -nostdlib   -Wl,-Map,"$OUT/OpenPrint.map"   -o "$OUT/OpenPrint.driver"   "$OUT/printertag.o" "$OUT/openprint_driver.o" "$OUT/oap_arith.o" -lgcc
+"$CC" -m68040 -c -o "$OUT/printertag.o" "$ROOT/src/driver/printertag.s"
+"$CC" -m68040 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin -nostdlib -c -o "$OUT/openprint_driver.o"   "$ROOT/src/driver/openprint_driver.c"
+"$CC" -m68040 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -fomit-frame-pointer -fno-builtin -nostdlib -c -o "$OUT/oap_arith.o" "$ROOT/src/driver/arith.c"
+"$CC" -m68040 -nostartfiles -nostdlib   -Wl,-Map,"$OUT/OpenPrint.map"   -o "$OUT/OpenPrint.driver"   "$OUT/printertag.o" "$OUT/openprint_driver.o" "$OUT/oap_arith.o" -lgcc
 file "$OUT/OpenPrint.driver"
 wc -c "$OUT/OpenPrint.driver"
 
