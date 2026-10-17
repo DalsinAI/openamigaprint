@@ -5,9 +5,11 @@ CC=${AMIGA_CC:-$(command -v m68k-amigaos-gcc || echo m68k-amigaos-gcc)}   # set 
 OUT=${OAP_OUT:-"$ROOT/build/amigaos3"}   # set OAP_OUT to build elsewhere
 mkdir -p "$OUT"
 python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenPrintTool.info"
+# The 68040, soft float (one program for full and LC/EC 68040s): the specs
+# file links libnix's soft libm, not its FPU libm881.
 # Wall, Wextra and Werror on every 68k compile: the build is clean on GCC 6.5
 # and on GCC 16 (scripts/build-compilers.sh builds with both).
-APP='-m68040 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul'
+APP="-m68040 -specs=$ROOT/specs/m68k-soft-m68040.specs -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul"
 # What printers are reached by: the connection, IPP client and Print-Job.
 NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/ipp_submit.c $ROOT/src/net/http_auth.c $ROOT/src/net/mdns.c"
 . "$ROOT/scripts/tls-flags.sh"

@@ -6,7 +6,7 @@ OUT=${OAP_OUT:-"$ROOT/build/amigaos3"}   # set OAP_OUT to build elsewhere
 mkdir -p "$OUT"
 # Strong library-base definitions prevent libnix autolib from opening window.library.
 # ReAction classes and bsdsocket.library are opened explicitly by our code.
-FLAGS='-m68040 -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul'
+FLAGS="-m68040 -specs=$ROOT/specs/m68k-soft-m68040.specs -fno-common -O2 -fno-delete-null-pointer-checks -Wall -Wextra -Werror -noixemul"
 . "$ROOT/scripts/tls-flags.sh"
 NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/http_auth.c $ROOT/src/net/mdns.c"
 "$CC" $FLAGS -I"$ROOT/include" $TLS_FLAGS "$ROOT"/src/discovery/*.c "$ROOT/src/core/ipp.c" $NET $TLS_SOURCES "$ROOT/src/amiga/oap_stack.c" -lamiga -o "$OUT/OAPDiscover"
