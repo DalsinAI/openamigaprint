@@ -1,4 +1,4 @@
-/* Bare 68000 helpers used by the printer driver. */
+/* Bare helpers used by the printer driver (it links no C library). */
 unsigned long __udivsi3(unsigned long n,unsigned long d)
 {
     unsigned long q=0,r=0;
