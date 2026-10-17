@@ -28,7 +28,7 @@ C:OpenPrint
 There is no AmigaChrome dependency in the core stack.
 ## First-light status
 
-Implemented and building for 68000-class AmigaOS 3.x:
+Implemented and building for AmigaOS 3.x on the 68040:
 
 - classic V35 printer-driver segment;
 - text-to-PDF streaming through `printer.device`;
