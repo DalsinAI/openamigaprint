@@ -21,9 +21,6 @@ static const OAPTlsBackend *const backends[] = {
 #ifdef OAP_TLS_OPENTLS
     &oap_tls_opentls,
 #endif
-#ifdef OAP_TLS_OSSL
-    &oap_tls_ossl,
-#endif
     NULL
 };
 
@@ -61,8 +58,7 @@ static int wanted(const OAPTlsBackend *b, const char *only)
         return 1;
     if (!strcmp(only, "none"))
         return 0;
-    return (!strcmp(only, "opentls") && !strcmp(b->name, "OpenTLS")) ||
-           (!strcmp(only, "amissl") && !strcmp(b->name, "AmiSSL"));
+    return !strcmp(only, "opentls") && !strcmp(b->name, "OpenTLS");
 }
 
 int oap_tls_available(char *why, size_t why_cap)
@@ -80,14 +76,8 @@ int oap_tls_available(char *why, size_t why_cap)
             return 1;
         }
     }
-    snprintf(why, why_cap, "This printer uses IPPS (encrypted IPP), which needs opentls.library%s. "
-             "Install it, or use the printer's ipp:// address.",
-#ifdef OAP_TLS_OSSL
-             " or AmiSSL 5"
-#else
-             ""
-#endif
-             );
+    snprintf(why, why_cap, "This printer uses IPPS (encrypted IPP), which needs opentls.library. "
+             "Install it, or use the printer's ipp:// address.");
     return 0;
 }
 
