@@ -57,6 +57,17 @@
 #include <proto/icon.h>
 #include <workbench/icon.h>
 #include <clib/alib_protos.h>
+
+/* amiga.lib's SetRexxVar: OpenNDK's libamiga.a has it, but its
+ * clib/alib_protos.h doesn't declare it yet, and the stoves build on
+ * OpenNDK since 17 October 2026. Declared here, as NDK 3.2 declares it,
+ * until OpenNDK's clib/alib_protos.h declares it (then remove this, or
+ * define OAV_HAVE_SETREXXVAR_PROTO). Where the header has it as well, the
+ * two declarations are the same and do no harm. */
+#if !defined(OAV_HAVE_SETREXXVAR_PROTO) && !defined(SetRexxVar)
+LONG SetRexxVar(struct RexxMsg *rexxmsg, CONST_STRPTR name, CONST_STRPTR value, LONG length);
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
