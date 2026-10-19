@@ -1,18 +1,17 @@
 /* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
 #ifndef OAP_TLS_H
 #define OAP_TLS_H
-/* OpenPrint's TLS abstraction: IPPS (IPP over TLS) without making one TLS
- * library mandatory. Plain ipp:// never comes here and needs no TLS
- * library at all.
+/* OpenPrint's TLS abstraction: IPPS (IPP over TLS). Plain ipp:// never
+ * comes here and needs no TLS library at all.
  *
- * Backends, tried in this order in each task that asks:
- *   - opentls.library (OpenTLS, on BearSSL; MIT licensed and free), API 1;
- *   - AmiSSL 5 (OpenSSL 3), when the build had its SDK (OAP_TLS_OSSL);
- * on x86 or ARM64 cores (the host tests), OpenSSL itself stands in for
- * AmiSSL, and a test build of OpenTLS's calls on OpenSSL stands in for
- * opentls.library, so both backends' code runs against a real printer
- * emulator. ENV:OpenPrint/TLS set to "opentls", "amissl" or "none" makes a
- * task use only that one (for testing).
+ * The backend, opened in each task that asks: opentls.library (OpenTLS, on
+ * BearSSL; MIT licensed and free), API 1. On x86 or ARM64 cores (the host
+ * tests) OpenTLS's own code built for the host, or a test build of its
+ * calls on OpenSSL, stands in for opentls.library, so the backend's code
+ * runs against a real printer emulator. ENV:OpenPrint/TLS set to "none"
+ * makes a task act as if there were no TLS library (for testing). (Until
+ * 19 October 2026 AmiSSL 5 was a second backend; the Team's programs are
+ * OpenTLS only now.)
  *
  * Certificates: a printer's certificate is accepted when an authority the
  * library trusts signed it for the printer's name, or when it is the very
@@ -47,7 +46,7 @@ typedef struct OAPTlsInfo {
     char subject[128];                 /* who it is issued to, when the backend says */
     char problem[200];                 /* the backend's own words, when not OK */
     char protocol[16], cipher[64];
-    char backend[16];                  /* "OpenTLS" or "AmiSSL" */
+    char backend[16];                  /* "OpenTLS" */
 } OAPTlsInfo;
 
 /* 1 when the verdict lets a print job (or a password) go to the printer. */
@@ -67,7 +66,7 @@ typedef struct OAPTls OAPTls;
 /* 1 when a TLS library is open in this task; otherwise 0 and `why` says,
  * in words, what to install. Opens it on first use. */
 int oap_tls_available(char *why, size_t why_cap);
-/* "OpenTLS", "AmiSSL", or "" when none is open. */
+/* "OpenTLS", or "" when none is open. */
 const char *oap_tls_backend(void);
 /* Closes the TLS library (each task, at the end, after oap_net_stop's peers). */
 void oap_tls_stop(void);

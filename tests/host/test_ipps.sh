@@ -7,9 +7,10 @@
 #     authority made here;
 #   - tests/host/auth_printer.py, which asks for a login (Digest over
 #     IPPS; Basic over plain IPP, where OpenPrint must refuse to answer).
-# Both TLS backends run: OpenSSL in place of AmiSSL, and OpenTLS: its own
-# code built for the host when OPENTLS names an openamigatls checkout with
-# build-host/ built, else its calls on OpenSSL (tests/host/opentls_host.c).
+# The TLS backend is OpenTLS: its own code built for the host when OPENTLS
+# names an openamigatls checkout with build-host/ built, else its calls on
+# OpenSSL (tests/host/opentls_host.c). (Until 19 October 2026 every check
+# also ran with OpenSSL standing in for AmiSSL.)
 # Needs ippeveprinter (cups-ipp-utils), openssl, python3 and the OpenSSL
 # headers; skips without them. Files stay in build/ipps-lab (each run's
 # printed jobs in build/ipps-lab/runs/).
@@ -76,7 +77,7 @@ else
 fi
 echo "OpenTLS backend runs on: $OT_WHAT"
 cc -std=c11 -D_DEFAULT_SOURCE -O2 -Wall -Wextra -Werror -I"$ROOT/include" $OT_INC \
-   -DOAP_TLS_OSSL -DOAP_TLS_OPENTLS -o ipps_tool "$ROOT/tests/host/ipps_tool.c" \
+   -DOAP_TLS_OPENTLS -o ipps_tool "$ROOT/tests/host/ipps_tool.c" \
    "$ROOT"/src/net/*.c "$ROOT"/src/tls/*.c "$ROOT/src/core/ipp.c" "$ROOT/src/core/job.c" "$ROOT/src/core/pdf_demo.c" \
    "$ROOT/src/discovery/protocol.c" "$ROOT/src/discovery/http.c" $OT_LIB -lssl -lcrypto
 printf '%%PDF-1.4\n%% OpenPrint IPPS host test\n%%%%EOF\n' > page.pdf
@@ -104,7 +105,7 @@ check "plain ipp:// prints with no TLS library" 'rc=1' "$out"
 out=$(OAP_TLS=none ./ipps_tool query ipps://localhost:$P_SELF/ipp/print || true)
 check "ipps:// with no TLS library says what to install" 'verdict=notls.*|needs opentls.library' "$out"
 
-for backend in amissl opentls; do
+for backend in opentls; do
     export OAP_TLS=$backend
     : > trusted.txt
     idle ipp://localhost:$P_SELF/ipp/print
@@ -161,5 +162,5 @@ check "no password over plain ipp://" "only over ipps://" "$out"
 check "(the plain printer never saw an Authorization header)" "^$" "$(grep -v 'auth=none' plain.log || true)"
 
 echo "$checks checks, $fails failed"
-[ $fails -eq 0 ] && echo "PASS: IPPS end to end against local printers, both TLS backends; no internet"
+[ $fails -eq 0 ] && echo "PASS: IPPS end to end against local printers, with OpenTLS; no internet"
 [ $fails -eq 0 ]
