@@ -43,7 +43,7 @@ test-discovery-sendfail:
 	sh tests/test_discovery_sendfail.sh
 
 # IPPS end to end against printers on 127.0.0.1 (ippeveprinter and a login
-# printer), both TLS backends; skips when ippeveprinter or OpenSSL is missing.
+# printer), the OpenTLS backend; skips when ippeveprinter or OpenSSL is missing.
 test-ipps:
 	sh tests/host/test_ipps.sh
 
