@@ -5,7 +5,7 @@
  *   ipps_tool query URI          what the printer can do and its certificate
  *   ipps_tool print URI PDF      Print-Job, as C:OAVWorker sends it
  *   ipps_tool trust KEY FP SUBJ  remember a printer's certificate
- * OAP_TLS picks the backend ("opentls" or "amissl"), OAP_TRUST_FILE the
+ * OAP_TLS=none leaves TLS out ("opentls": the one backend), OAP_TRUST_FILE the
  * remembered certificates, OAP_TLS_CA_FILE an extra authority, and
  * OAP_LOGIN_FILE the logins; on the Amiga, ENV:OpenPrint/TLS,
  * ENV:OpenPrint/TrustedPrinters and ENV:OpenPrint/Logins. */

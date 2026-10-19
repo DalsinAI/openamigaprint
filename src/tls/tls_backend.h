@@ -31,9 +31,6 @@ typedef struct OAPTlsBackend {
 #ifdef OAP_TLS_OPENTLS
 extern const OAPTlsBackend oap_tls_opentls;
 #endif
-#ifdef OAP_TLS_OSSL
-extern const OAPTlsBackend oap_tls_ossl;
-#endif
 
 /* 1 when the open backend cannot finish a LOOK at a refused certificate
  * (src/net/conn.c then reconnects and tries OAP_TLS_ANY). */

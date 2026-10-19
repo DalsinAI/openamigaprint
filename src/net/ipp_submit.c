@@ -26,8 +26,8 @@ static int progress(OAPSendProgress fn, void *ctx, const char *stage,
 static void untrusted(const OAPTlsInfo *tls, char *status, size_t cap)
 {
     if (tls->verdict == OAP_CERT_NOTLS)
-        snprintf(status, cap, "%s", "This printer uses IPPS (encrypted IPP), which needs opentls.library or AmiSSL 5. "
-                 "Install one, or use the printer's ipp:// address.");
+        snprintf(status, cap, "%s", "This printer uses IPPS (encrypted IPP), which needs opentls.library. "
+                 "Install it, or use the printer's ipp:// address.");
     else if (tls->verdict == OAP_CERT_ASK)
         snprintf(status, cap, "This printer's certificate isn't trusted yet: in Printers and Queue, select it and "
                  "click Use for printing to check and trust it");
