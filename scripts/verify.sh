@@ -2,7 +2,7 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 B="$ROOT/build/amigaos3"
-TOOL=${AMIGA_TOOL_PREFIX:-/home/da1ek/ACNet-compat-lab/toolchain/amiga/bin/m68k-amigaos}
+TOOL=${AMIGA_TOOL_PREFIX:-m68k-amigaos}
 NM="$TOOL-nm"
 OD="$TOOL-objdump"
 
