@@ -5,9 +5,9 @@ CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 CPPFLAGS += -Iinclude
 CORE = src/core/job.c src/core/ipp.c src/core/pdf_demo.c
 
-.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-discovery-sendfail test-ipps
+.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-ipps
 all: test
-test: test-core test-discovery test-submit test-auth test-viewer test-discovery-sendfail
+test: test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail
 
 build/test_core: tests/test_core.c $(CORE) include/oap.h
 	mkdir -p build
@@ -39,6 +39,13 @@ build/test_viewer_core: tests/test_viewer_core.c src/viewer/oav_core.c include/o
 test-viewer: build/test_viewer_core
 	./build/test_viewer_core
 
+# The printer driver (the PDF writer behind printer.device), against stub headers in tests/host/driver
+build/test_driver: tests/test_driver.c src/driver/openprint_driver.c $(wildcard tests/host/driver/*/*.h)
+	mkdir -p build
+	$(CC) -Itests/host/driver $(CFLAGS) -o $@ tests/test_driver.c src/driver/openprint_driver.c
+test-driver: build/test_driver
+	./build/test_driver
+
 test-discovery-sendfail:
 	sh tests/test_discovery_sendfail.sh
 
@@ -48,4 +55,4 @@ test-ipps:
 	sh tests/host/test_ipps.sh
 
 clean:
-	rm -f build/test_core build/test_discovery build/test_submit build/test_auth build/test_viewer_core build/oap-firstlight.pdf
+	rm -f build/test_core build/test_discovery build/test_submit build/test_auth build/test_viewer_core build/test_driver build/oap-firstlight.pdf
