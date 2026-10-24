@@ -42,8 +42,10 @@ void CopyMem(const void *from, APTR to, ULONG size) { memmove(to, from, size); }
 
 static char *out;
 static size_t out_len, out_cap;
+static long writes;
 static LONG pwrite(APTR data, LONG len)
 {
+    writes++;
     if (out_len + (size_t)len + 1 > out_cap) {
         out_cap = (out_len + (size_t)len + 1) * 2;
         out = realloc(out, out_cap);
@@ -70,6 +72,7 @@ static void start(UWORD paper, UWORD length, UWORD pitch, UWORD spacing, UWORD a
     pd.pd_Preferences.PrintSpacing = spacing;
     pd.pd_Preferences.PrintAspect = aspect;
     out_len = 0;
+    writes = 0;
     oap_init(&pd);
     oap_open(NULL);
 }
@@ -182,6 +185,7 @@ int main(void)
     CHECK(find(out, "(0300 The quick") != NULL, "line 300 missing");
     CHECK(find(out, "0 -11.7 Td") != NULL, "66 lines on A4: spacing 11.7 expected");
     CHECK(allocs == 0, "%ld AllocMem not freed", allocs);
+    CHECK(writes > 300 && writes < 340, "%ld writes to the port for 300 lines: a line at a time expected", writes);
 
     name = "2700 lines: 41 pages (more than 32)";
     start(EURO_A4, 66, PICA, SIX_LPI, ASPECT_HORIZ);

@@ -58,12 +58,25 @@ static ULONG slen(const char *s)
 {
     ULONG n=0; while(s&&s[n])n++; return n;
 }
+/* What goes to the port is gathered here and sent a line, a page or a picture's row at a time (24 October 2026:
+ * every byte was a write of its own, and 2,700 lines through PRT: took over ten minutes in a lab). Sent at each
+ * line's end, so a program's own raw writes keep their place to within a line. */
+static UBYTE g_out[1024];
+static UWORD g_out_n;
+static void flush_out(void)
+{
+    if(PD&&g_out_n){PD->pd_PWrite((APTR)g_out,(LONG)g_out_n);PD->pd_PBothReady();}
+    g_out_n=0;
+}
 static void pw_n(const void *data, ULONG len)
 {
     if(!PD||!data||!len)return;
-    PD->pd_PWrite((APTR)data,(LONG)len);
-    PD->pd_PBothReady();
     g_offset += len;
+    if(len>sizeof g_out-g_out_n){
+        flush_out();
+        if(len>=sizeof g_out){PD->pd_PWrite((APTR)data,(LONG)len);PD->pd_PBothReady();return;}
+    }
+    CopyMem((APTR)data,g_out+g_out_n,len);g_out_n=(UWORD)(g_out_n+len);
 }
 static void pw(const char *s){pw_n(s,slen(s));}
 static void pw_u(ULONG v)
@@ -136,6 +149,7 @@ static void text_geometry(void)
 }
 static void reset_state(void)
 {
+    flush_out();
     g_offset=0;g_next_obj=4;g_page_count=0;g_line=0;
     g_doc_open=g_page_open=g_text_open=g_img_open=0;
     g_img_w=g_img_h=0;g_img_row_len=g_img_row_cap=0;g_dpi=300;
@@ -187,6 +201,7 @@ static void text_newline(void)
     pw(") Tj 0 -");pw_u(g_lead10/10);
     if(g_lead10%10){pw(".");pw_u(g_lead10%10);}
     pw(" Td (");
+    flush_out();
 }
 static void end_page(void)
 {
@@ -204,6 +219,7 @@ static void end_page(void)
     pw_u(g_content_obj);pw(" 0 R >>\nendobj\n");
     g_page_ids[g_page_count++]=g_page_obj;
     g_page_open=0;g_text_open=0;g_line=0;
+    flush_out();
 }
 static void finish_doc(void)
 {
@@ -219,6 +235,7 @@ static void finish_doc(void)
     for(i=1;i<=maxobj;i++){pw_fixed10(g_obj_offset[i]);pw(" 00000 n \n");}
     pw("trailer << /Size ");pw_u((ULONG)maxobj+1);pw(" /Root 1 0 R >>\n");
     pw("startxref\n");pw_u(xref);pw("\n%%EOF\n");
+    flush_out();
     PD->pd_PBothReady();
     g_doc_open=0;
     free_tables();
@@ -273,7 +290,7 @@ int PRT_STDARGS oap_open(struct IORequest *ior)
 }
 void PRT_STDARGS oap_close(struct IORequest *ior)
 {
-    (void)ior;finish_doc();
+    (void)ior;finish_doc();flush_out();
     if(PD&&PD->pd_PrintBuf){FreeMem(PD->pd_PrintBuf,g_img_row_cap);PD->pd_PrintBuf=0;}
 }
 LONG PRT_STDARGS oap_conv(STRPTR buf,TEXT c,LONG crlf)
@@ -328,6 +345,7 @@ static LONG render_init(struct IODRPReq *io,LONG width,LONG height)
     pw("q\n");pw_u(draw_w);pw(" 0 0 ");pw_u(draw_h);pw(" 40 ");pw_u(y);pw(" cm\n");
     pw("BI /W ");pw_u(g_img_w);pw(" /H ");pw_u(g_img_h);
     pw(" /CS /RGB /BPC 8 /F /AHx ID\n");
+    flush_out();
     g_img_open=1;return PDERR_NOERR;
 }
 static void put_rgb_hex(UBYTE *dst,ULONG *pos,UBYTE r4,UBYTE g4,UBYTE b4)
@@ -368,6 +386,7 @@ static LONG render_flush(LONG rows)
 {
     if(rows<=0)return PDERR_NOERR;
     if(PD->pd_PrintBuf&&g_img_row_len)pw_n(PD->pd_PrintBuf,g_img_row_len);
+    flush_out();
     return PDERR_NOERR;
 }
 static LONG render_close(LONG error,ULONG flags)
@@ -378,6 +397,7 @@ static LONG render_close(LONG error,ULONG flags)
     } else {
         g_img_open=0;g_page_open=0;g_text_open=0;g_doc_open=0;
     }
+    flush_out();
     if(PD)PD->pd_PBothReady();
     if(PD&&PD->pd_PrintBuf){FreeMem(PD->pd_PrintBuf,g_img_row_cap);PD->pd_PrintBuf=0;}
     g_img_row_len=g_img_row_cap=0;
