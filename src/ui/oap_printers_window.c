@@ -68,6 +68,7 @@ enum {
 
 typedef struct QueueRow {
     char pdf[256], name[64], state[48], printer[96], size[16];
+    int raw;                            /* PostScript, PCL or other bytes a program sent as they are: kept, not sent */
 } QueueRow;
 
 typedef struct Row {
@@ -554,25 +555,47 @@ static void job_field(const char *line, const char *key, char *dst, size_t cap)
     }
 }
 
+/* A queued document's .job: the same name with ".job" for its type (".pdf", ".ps", ".pcl", ".prn"). */
+static int job_path(const char *doc, char *path, size_t cap)
+{
+    const char *dot = strrchr(doc, '.');
+    size_t n = dot ? (size_t)(dot - doc) : strlen(doc);
+    if (n + 5 > cap)
+        return 0;
+    memcpy(path, doc, n);
+    strcpy(path + n, ".job");
+    return 1;
+}
+
+/* Kinds of document the queue keeps: OpenPrint's PDFs, and what programs sent raw (oapspooler.c). */
+static int queued_kind(const char *file, int *raw)
+{
+    size_t len = strlen(file);
+    *raw = len > 3 && !strcmp(file + len - 3, ".ps");
+    if (len > 4 && (!strcmp(file + len - 4, ".pcl") || !strcmp(file + len - 4, ".prn")))
+        *raw = 1;
+    return *raw || (len > 4 && !strcmp(file + len - 4, ".pdf"));
+}
+
 static void read_job(QueueRow *r)
 {
-    char path[270], line[600], printer[OAP_SELECTION_URI_MAX] = "", state[48] = "queued";
+    char path[270], line[600], printer[OAP_SELECTION_URI_MAX] = "", state[48] = "queued", format[48] = "";
     FILE *f;
-    size_t n = strlen(r->pdf);
     int i;
-    if (n > 4 && n < sizeof(path)) {
-        strcpy(path, r->pdf);
-        strcpy(path + n - 4, ".job");
+    if (job_path(r->pdf, path, sizeof(path))) {
         f = fopen(path, "r");
         if (f) {
             while (fgets(line, sizeof(line), f)) {
                 job_field(line, "state=", state, sizeof(state));
                 job_field(line, "printer=", printer, sizeof(printer));
                 job_field(line, "title=", r->name, sizeof(r->name));   /* what was printed, not the spool name */
+                job_field(line, "format=", format, sizeof(format));
             }
             fclose(f);
         }
     }
+    if (r->raw && !strcmp(state, "queued"))
+        copy(state, sizeof(state), "Kept: not sent");
     copy(r->state, sizeof(r->state), !strcmp(state, "queued") ? "Waiting" : !strcmp(state, "submitted") ? "Sent"
                                       : !strcmp(state, "uncertain") ? "Unknown: check the printer"
                                       : !strcmp(state, "uploading") ? "Sending" : !strcmp(state, "error") ? "Failed"
@@ -609,11 +632,13 @@ static void fill_queue(void)
         while (P.job_count < QUEUE_MAX && ExNext(lock, fib)) {
             QueueRow *r = &P.jobs[P.job_count];
             const char *file = (const char *)fib->fib_FileName;
-            size_t len = strlen(file);
-            if (fib->fib_DirEntryType > 0 || len < 5 || strcmp(file + len - 4, ".pdf"))
+            const char *dot = strrchr(file, '.');
+            int raw = 0;
+            if (fib->fib_DirEntryType > 0 || !dot || !queued_kind(file, &raw))
                 continue;
+            r->raw = raw;
             snprintf(r->pdf, sizeof(r->pdf), "%s/%s", OAP_QUEUE_DIR, file);
-            snprintf(r->name, sizeof(r->name), "%.*s", (int)(len - 4), file);
+            snprintf(r->name, sizeof(r->name), "%.*s", (int)(dot - file), file);
             if (fib->fib_Size >= 1024L * 1024L)
                 snprintf(r->size, sizeof(r->size), "%ld.%ld MB", (long)fib->fib_Size / 1048576L, (long)fib->fib_Size % 1048576L / 104858L);
             else
@@ -651,6 +676,10 @@ static void print_job(void)
     char program[256], cmd[600];
     if (!r)
         return;
+    if (r->raw) {
+        show_status("What a program sent raw (PostScript, PCL) stays in the queue: sending it is still to come");
+        return;
+    }
     oap_program_path("OpenPrint", program, sizeof(program));
     snprintf(cmd, sizeof(cmd), "\"%s\" \"%s\"", program, r->pdf);
     show_status(run_async(cmd) ? "The Print window is open for that document" : "Couldn't open OpenPrint");
@@ -662,7 +691,6 @@ static void remove_job(void)
     QueueRow *r = selected_job();
     char dir[200], to[400], from_job[270], to_job[400], text[300];
     BPTR lock;
-    size_t n;
     if (!r)
         return;
     snprintf(dir, sizeof(dir), "%s/Removed", OAP_QUEUE_DIR);
@@ -670,14 +698,8 @@ static void remove_job(void)
     if (lock)
         UnLock(lock);
     snprintf(to, sizeof(to), "%s/%s", dir, FilePart((STRPTR)r->pdf));
-    n = strlen(r->pdf);
-    copy(from_job, sizeof(from_job), r->pdf);
-    if (n > 4)
-        strcpy(from_job + n - 4, ".job");
-    copy(to_job, sizeof(to_job), to);
-    n = strlen(to_job);
-    if (n > 4)
-        strcpy(to_job + n - 4, ".job");
+    if (!job_path(r->pdf, from_job, sizeof(from_job)) || !job_path(to, to_job, sizeof(to_job)))
+        return;
     if (!Rename((STRPTR)r->pdf, (STRPTR)to)) {
         show_status("Couldn't move the document out of the queue");
         return;

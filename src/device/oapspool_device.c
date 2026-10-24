@@ -5,6 +5,7 @@
 #include <exec/errors.h>
 #include <exec/execbase.h>
 #include <exec/io.h>
+#include <exec/memory.h>
 #include <dos/dos.h>
 #include <devices/parallel.h>
 #include <proto/exec.h>
@@ -57,11 +58,29 @@ static LONG dev_open(REG(a1,struct IORequest *io),REG(d0,ULONG unit),REG(d1,ULON
     io->io_Device=(struct Device *)b;io->io_Unit=&b->unit;io->io_Error=0;
     io->io_Message.mn_Node.ln_Type=NT_REPLYMSG;return 0;
 }
+/* A program that writes PostScript or PCL straight to the printer (PRD_RAWWRITE, aRAW, PRT:RAW) sends no %%EOF,
+ * so the spooler can't tell where its job ends; the last close is the end. Sent with no reply port, after every write
+ * of this opener (each was answered before the close), so the spooler sees it after them. */
+static void end_job(void)
+{
+    struct MsgPort *p;
+    struct IOStdReq *m=AllocMem(sizeof(struct IOStdReq),MEMF_PUBLIC|MEMF_CLEAR);
+    if(!m)return;
+    m->io_Message.mn_Node.ln_Type=NT_MESSAGE;
+    m->io_Message.mn_Length=sizeof(struct IOStdReq);
+    m->io_Command=OAPCMD_ENDJOB;
+    Forbid();
+    p=FindPort((STRPTR)OAP_SPOOLER_PORT);
+    if(p)PutMsg(p,&m->io_Message);
+    Permit();
+    if(!p)FreeMem(m,sizeof(struct IOStdReq));
+}
 static BPTR dev_close(REG(a1,struct IORequest *io),REG(a6,struct OAPSpoolBase *b))
 {
     io->io_Device=(struct Device *)-1;io->io_Unit=(struct Unit *)-1;
     b->stats.close_calls++;
     if(b->unit.unit_OpenCnt)--b->unit.unit_OpenCnt;
+    if(!b->unit.unit_OpenCnt)end_job();     /* the last opener: a status check mid-job (OAPStatusTest) cuts nothing */
     if(b->lib.lib_OpenCnt)--b->lib.lib_OpenCnt;
     if(!b->lib.lib_OpenCnt&&(b->lib.lib_Flags&LIBF_DELEXP))return dev_expunge(b);
     return 0;
