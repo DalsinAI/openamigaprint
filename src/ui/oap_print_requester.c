@@ -242,17 +242,22 @@ static void fill_printers(const char *uri)
     R.printer_labels[R.offered_count] = NULL;
 }
 
+/* The line under the printer, for printer p (NULL: none chosen); layout() measures it for every printer offered. */
+static void info_for(const OAPPrinter *p, char *out, size_t n)
+{
+    if (!p)
+        copy(out, n, "No printer chosen");
+    else if (oap_printer_is_file(p))
+        copy(out, n, "Print saves the document as a PDF file on this Amiga");
+    else if (oap_printer_is_secure(p))
+        snprintf(out, n, "Encrypted (IPPS). %s", p->note[0] ? p->note : "Verified to print PDF");
+    else
+        copy(out, n, p->note[0] ? p->note : "Verified to print PDF");
+}
+
 static void printer_info(void)
 {
-    const OAPPrinter *p = chosen();
-    if (!p)
-        copy(R.info_text, sizeof(R.info_text), "No printer chosen");
-    else if (oap_printer_is_file(p))
-        copy(R.info_text, sizeof(R.info_text), "Print saves the document as a PDF file on this Amiga");
-    else if (oap_printer_is_secure(p))
-        snprintf(R.info_text, sizeof(R.info_text), "Encrypted (IPPS). %s", p->note[0] ? p->note : "Verified to print PDF");
-    else
-        copy(R.info_text, sizeof(R.info_text), p->note[0] ? p->note : "Verified to print PDF");
+    info_for(chosen(), R.info_text, sizeof(R.info_text));
 }
 
 /* ---- layout -------------------------------------------------------------- */
@@ -288,6 +293,25 @@ static void layout(void)
     if ((w = 2 * OAP_GT_INSET + G->label_w + OAP_GT_GAP + cyc) > G->rw)
         G->rw = w;
     G->pw = 150 * g->fh / 8;
+    /* The line under the printer runs from the controls' edge to the column's: wide enough for what it says for
+     * any printer offered (the lab, 25 Oct 2026: Save as PDF file's line was cut off at "on t"), but no wider
+     * than the screen leaves, so a long printer note never sends the window to the small font. */
+    {
+        char t[sizeof(R.info_text)];
+        int need = 0, most = g->screen->Width - 24 - 2 * OAP_GT_MARGIN - G->pw - 2 * OAP_GT_GAP;
+        info_for(NULL, t, sizeof(t));
+        need = oap_gt_text_w(g, t);
+        for (i = 0; i < R.offered_count; i++) {
+            info_for(&R.printers.printer[R.offered[i]], t, sizeof(t));
+            if ((w = oap_gt_text_w(g, t)) > need)
+                need = w;
+        }
+        w = G->label_w + OAP_GT_GAP + need + 8;     /* TEXT_KIND's own edge */
+        if (w > most)
+            w = most;
+        if (w > G->rw)
+            G->rw = w;
+    }
     mxh = g->fh > 9 ? g->fh : 9;
     G->mx_pitch = gh + 2;
 
