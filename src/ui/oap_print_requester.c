@@ -12,10 +12,14 @@
  *   - progress shows in a status line and a bar;
  *   - the window follows the screen's font (Topaz 8 if it would not fit),
  *     opens centred, every control has a key, and the last settings are
- *     remembered.
+ *     remembered;
+ *   - the paper starts on the document's own (its .job), else on OpenPrefs'
+ *     Printing page's (printer.prefs), unless one was chosen here since that
+ *     page's paper last changed (25 October 2026; include/oap_paper.h).
  * Sending stays with C:OAVWorker, and its rules stay: an upload whose outcome
  * is uncertain keeps Print disabled so a job is never sent twice. */
 #include "oap.h"
+#include "oap_paper.h"
 #include "lastdir.h"
 #include "oap_discovery.h"
 #include "oap_gt.h"
@@ -48,13 +52,16 @@ struct GfxBase *GfxBase;
 struct Library *GadToolsBase, *AslBase;
 
 #define SETTINGS_VAR "OpenPrint/PrintSettings"
+/* OpenPrefs' Printing page writes the paper here (ENV:, and ENVARC: on Save); it reads ENV:'s, else ENVARC:'s */
+#define PAGE_PREFS "ENV:Sys/printer.prefs"
+#define PAGE_PREFS_ARC "ENVARC:Sys/printer.prefs"
 
 enum {
     G_PRINTER = 1, G_FIND, G_INFO, G_COPIES, G_LESS, G_MORE, G_PAGES, G_RANGE, G_PAPER, G_LAYOUT, G_SIDES, G_COLOUR,
     G_STATUS, G_PRINT, G_SAVE, G_CANCEL
 };
 
-static STRPTR paper_labels[] = { (STRPTR)"A4 (210 \xd7 297 mm)", (STRPTR)"Letter (8.5 \xd7 11 in)", NULL };
+static STRPTR paper_labels[OAP_PAPERS + 1];          /* oap_paper_label's, in OAP_PAPER_ order */
 static STRPTR layout_labels[] = { (STRPTR)"Portrait", (STRPTR)"Landscape", NULL };
 static STRPTR sides_labels[] = { (STRPTR)"One-sided", (STRPTR)"Two-sided, long edge", (STRPTR)"Two-sided, short edge", NULL };
 static STRPTR colour_labels[] = { (STRPTR)"Colour", (STRPTR)"Black and white", NULL };
@@ -87,6 +94,9 @@ static struct PrintRequester {
     char status_text[256], info_text[200], range_text[16];
     char request[OAV_PATH_MAX];
     int row, copies, pages, sides;             /* what the gadgets show */
+    int page;                                  /* the Printing page's pt_PaperSize, or OAP_PAGE_NONE */
+    int kept, kept_page;                       /* the paper last chosen here (-1 none), and the page's then */
+    int paper_chosen;                          /* the paper was chosen in this window */
     int busy, sent, percent, finished, ticks;
 } R;
 
@@ -139,49 +149,67 @@ static const char *job_title(const char *pdf)
 }
 
 /* A page OpenView laid out says its paper and orientation in its .job
- * (paper=0 A4 / 1 Letter, landscape=0/1): the Print requester starts there. */
-static void job_page_setup(const char *pdf, OAPJobOptions *o)
+ * (paper=0 A4 / 1 Letter, and 2 Legal, 3 A3, 4 A5; landscape=0/1): the Print
+ * requester starts there. The .job's paper, or -1 when it says none. */
+static int job_page_setup(const char *pdf, OAPJobOptions *o)
 {
     char path[300], line[120];
     size_t n = strlen(pdf);
     FILE *f;
+    int paper = -1;
     if (n <= 4 || n >= sizeof(path) || strcmp(pdf + n - 4, ".pdf"))
-        return;
+        return -1;
     strcpy(path, pdf);
     strcpy(path + n - 4, ".job");
     if (!(f = fopen(path, "r")))
-        return;
+        return -1;
     while (fgets(line, sizeof(line), f)) {
         if (!strncmp(line, "paper=", 6))
-            o->paper = atoi(line + 6) ? OAP_PAPER_LETTER : OAP_PAPER_A4;
+            paper = oap_job_paper(line + 6);
         else if (!strncmp(line, "landscape=", 10))
             o->orientation = atoi(line + 10) ? OAP_LANDSCAPE : OAP_PORTRAIT;
     }
     fclose(f);
+    return paper;
+}
+
+/* OpenPrefs' Printing page's paper: pt_PaperSize in ENV:Sys/printer.prefs,
+ * else ENVARC:'s (as the page reads them), or OAP_PAGE_NONE. */
+static int page_paper(void)
+{
+    static unsigned char file[4096];
+    FILE *f = fopen(PAGE_PREFS, "rb");
+    size_t n;
+    if (!f && !(f = fopen(PAGE_PREFS_ARC, "rb")))
+        return OAP_PAGE_NONE;
+    n = fread(file, 1, sizeof(file), f);
+    fclose(f);
+    return oap_printer_prefs_paper(file, n);
 }
 
 /* ---- remembered settings ---------------------------------------------- */
 
+/* Copies, layout, colour and sides into o; the paper last chosen here, and
+ * the Printing page's paper it was chosen against, into R.kept and R.kept_page. */
 static void load_settings(OAPJobOptions *o)
 {
     char text[96];
-    int copies, paper, layout, colour, sides;
-    if (GetVar((STRPTR)SETTINGS_VAR, (STRPTR)text, sizeof(text), GVF_GLOBAL_ONLY) <= 0)
-        return;
-    if (sscanf(text, "%d %d %d %d %d", &copies, &paper, &layout, &colour, &sides) == 5) {
-        if (copies >= 1 && copies <= 99)
-            o->copies = copies;
-        o->paper = paper == OAP_PAPER_LETTER ? OAP_PAPER_LETTER : OAP_PAPER_A4;
-        o->orientation = layout == OAP_LANDSCAPE ? OAP_LANDSCAPE : OAP_PORTRAIT;
-        o->color = colour ? OAP_COLOR : OAP_MONO;
-        o->duplex = sides >= OAP_SIMPLEX && sides <= OAP_DUPLEX_SHORT ? sides : OAP_SIMPLEX;
-    }
+    R.kept = -1;
+    R.kept_page = OAP_PAGE_UNKNOWN;
+    if (GetVar((STRPTR)SETTINGS_VAR, (STRPTR)text, sizeof(text), GVF_GLOBAL_ONLY) > 0)
+        oap_settings_read(text, o, &R.kept, &R.kept_page);
 }
 
+/* The paper is remembered only when it was chosen in this window, with the
+ * page's paper it was chosen against; else the one remembered before stays. */
 static void save_settings(const OAPJobOptions *o)
 {
     char text[96];
-    snprintf(text, sizeof(text), "%d %d %d %d %d", o->copies, o->paper, o->orientation, o->color, o->duplex);
+    if (R.paper_chosen) {
+        R.kept = o->paper;
+        R.kept_page = R.page;
+    }
+    oap_settings_write(text, sizeof(text), o, R.kept, R.kept_page);
     SetVar((STRPTR)SETTINGS_VAR, (STRPTR)text, (LONG)strlen(text), GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
 }
 
@@ -317,7 +345,7 @@ static void build(void)
     static const char *cycle_names[] = { "Si_ze", "_Layout", "S_ides", "Colo_ur" };
     int actives[4];
 
-    actives[0] = R.options->paper == OAP_PAPER_LETTER;
+    actives[0] = oap_paper_valid(R.options->paper) ? R.options->paper : OAP_PAPER_A4;
     actives[1] = R.options->orientation == OAP_LANDSCAPE;
     actives[2] = R.sides;
     actives[3] = R.options->color ? 0 : 1;
@@ -384,11 +412,15 @@ static void draw_preview(void)
     Geo *G = &R.geo;
     struct RastPort *rp = R.win->RPort;
     int bx = R.win->BorderLeft, by = R.win->BorderTop;
-    long pw = R.options->paper == OAP_PAPER_LETTER ? 216 : 210, ph = R.options->paper == OAP_PAPER_LETTER ? 279 : 297;
+    long pw, ph;
     long ax = bx + G->px + OAP_GT_INSET, ay = by + G->py + g->fh + OAP_GT_GAP;
     long aw = G->pw - 2 * OAP_GT_INSET, ah = G->ph - g->fh - 2 * OAP_GT_GAP - g->line_h - 4;
     long w, h, x, y, line;
     char caption[64];
+    int mw, mh;
+    oap_paper_mm(R.options->paper, &mw, &mh);
+    pw = mw;
+    ph = mh;
     if (R.options->orientation == OAP_LANDSCAPE) {
         long t = pw;
         pw = ph;
@@ -654,7 +686,10 @@ static void cycle(UWORD id, int step)
     switch (id) {
     case G_PRINTER: field = &R.row; n = R.offered_count; break;
     case G_SIDES: field = &R.sides; n = 3; break;
-    case G_PAPER: v = R.options->paper == OAP_PAPER_LETTER; R.options->paper = (v ^ 1) ? OAP_PAPER_LETTER : OAP_PAPER_A4; break;
+    case G_PAPER:
+        R.options->paper = ((oap_paper_valid(R.options->paper) ? R.options->paper : 0) + step + OAP_PAPERS) % OAP_PAPERS;
+        R.paper_chosen = 1;
+        break;
     case G_LAYOUT: v = R.options->orientation == OAP_LANDSCAPE; R.options->orientation = (v ^ 1) ? OAP_LANDSCAPE : OAP_PORTRAIT; break;
     case G_COLOUR: R.options->color = R.options->color ? OAP_MONO : OAP_COLOR; break;
     }
@@ -721,15 +756,20 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
 {
     OAPSelectionListener selection;
     char title[160], picked[OAP_SELECTION_URI_MAX], start[OAP_SELECTION_URI_MAX];
-    int done = 0, ok = 0;
+    int done = 0, ok = 0, i, job_paper;
 
     memset(&R, 0, sizeof(R));
     memset(&selection, 0, sizeof(selection));
     R.pdf = pdf;
     R.options = o;
     R.pdf_bytes = file_size(pdf);
+    for (i = 0; i < OAP_PAPERS; i++)
+        paper_labels[i] = (STRPTR)oap_paper_label(i);
+    paper_labels[OAP_PAPERS] = NULL;
     load_settings(o);
-    job_page_setup(pdf, o);
+    job_paper = job_page_setup(pdf, o);
+    R.page = page_paper();
+    o->paper = oap_paper_start(job_paper, R.page, &R.kept, &R.kept_page);
     R.copies = o->copies >= 1 && o->copies <= 99 ? o->copies : 1;
     R.sides = o->duplex >= OAP_SIMPLEX && o->duplex <= OAP_DUPLEX_SHORT ? o->duplex : OAP_SIMPLEX;
     copy(R.range_text, sizeof(R.range_text), "1-1");
@@ -817,7 +857,11 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
                     if (R.copies > 99) R.copies = 99;
                     GT_SetGadgetAttrs(gad(G_COPIES), R.win, NULL, GTIN_Number, R.copies, TAG_DONE);
                     break;
-                case G_PAPER: R.options->paper = code ? OAP_PAPER_LETTER : OAP_PAPER_A4; draw_preview(); break;
+                case G_PAPER:
+                    R.options->paper = oap_paper_valid(code) ? code : OAP_PAPER_A4;
+                    R.paper_chosen = 1;
+                    draw_preview();
+                    break;
                 case G_LAYOUT: R.options->orientation = code ? OAP_LANDSCAPE : OAP_PORTRAIT; draw_preview(); break;
                 case G_SIDES: R.sides = code; break;
                 case G_COLOUR: R.options->color = code ? OAP_MONO : OAP_COLOR; break;

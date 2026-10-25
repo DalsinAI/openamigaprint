@@ -59,7 +59,7 @@ int oav_read_request(const char *path,OAVRequest *r)
   else if(!strcmp(line,"page_start"))r->print.page_start=atoi(v);
   else if(!strcmp(line,"page_end"))r->print.page_end=atoi(v);
  }
- fclose(f);if(r->has_print_options&&(r->print.copies<1||r->print.copies>999||r->print.paper<0||r->print.paper>1||r->print.orientation<0||r->print.orientation>1||r->print.color<0||r->print.color>1||r->print.duplex<0||r->print.duplex>2||r->print.page_start<0||r->print.page_end<r->print.page_start))return 0;
+ fclose(f);if(r->has_print_options&&(r->print.copies<1||r->print.copies>999||r->print.paper<0||r->print.paper>=OAP_PAPERS||r->print.orientation<0||r->print.orientation>1||r->print.color<0||r->print.color>1||r->print.duplex<0||r->print.duplex>2||r->print.page_start<0||r->print.page_end<r->print.page_start))return 0;
  return (schema==2||schema==3)&&oav_safe_field(r->source);
 }
 int oav_result(const char *req,char *state,size_t statecap,char *msg,size_t msgcap)

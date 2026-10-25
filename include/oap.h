@@ -15,7 +15,10 @@ typedef struct OAPJobOptions {
     int page_end;
 } OAPJobOptions;
 
-enum { OAP_PAPER_A4 = 0, OAP_PAPER_LETTER = 1 };
+/* The paper sizes: those OpenPrint's driver makes (src/driver/openprint_driver.c, geometry) and OpenPrefs'
+ * Printing page lists first, in its order. A4 and Letter keep 0 and 1, as a .job's paper= and the remembered
+ * settings have them. src/core/paper.c has their words and sizes, src/core/ipp.c their IPP media names. */
+enum { OAP_PAPER_A4 = 0, OAP_PAPER_LETTER = 1, OAP_PAPER_LEGAL = 2, OAP_PAPER_A3 = 3, OAP_PAPER_A5 = 4, OAP_PAPERS = 5 };
 enum { OAP_PORTRAIT = 0, OAP_LANDSCAPE = 1 };
 enum { OAP_MONO = 0, OAP_COLOR = 1 };
 enum { OAP_SIMPLEX = 0, OAP_DUPLEX_LONG = 1, OAP_DUPLEX_SHORT = 2 };
@@ -30,6 +33,8 @@ typedef struct OAPUri {
 void oap_job_defaults(OAPJobOptions *o);
 int oap_parse_ipp_uri(const char *uri, OAPUri *out);
 int oap_ipp_build_prefix(const OAPJobOptions *o, unsigned char *buf, size_t cap, size_t *out_len);
+/* A paper's IPP media name (PWG 5101.1): iso_a4_210x297mm, na_letter_8.5x11in...; A4's for an unknown one. */
+const char *oap_ipp_media(int paper);
 int oap_pdf_write_demo(const char *path, const char *title);
 enum { OAP_SEND_ERROR=0, OAP_SEND_ACCEPTED=1, OAP_SEND_UNCERTAIN=-1, OAP_SEND_CANCELLED=-2 };
 /* Progress of a print job: stage is "preparing", "checking", "connecting",

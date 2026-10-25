@@ -39,7 +39,8 @@ Implemented and building for AmigaOS 3.x on the 68040:
 - Save PDF;
 - plain `ipp://` Print-Job submission through `bsdsocket.library`;
 - `ipps://` (IPP over TLS, 9 October 2026): TLS on the same socket through opentls.library (AmiSSL 5 too until 19 October 2026), with SNI, certificate and host-name checks, a "Trust this printer?" question for a printer's own certificate, remembered per printer by its fingerprint, and HTTP Basic and Digest logins sent only over a trusted TLS connection (see [IPPS](#ipps-ipp-over-tls));
-- copies, A4/Letter, portrait/landscape, colour/mono, duplex and page-range IPP attributes;
+- copies, paper (A4, Letter, Legal, A3, A5), portrait/landscape, colour/mono, duplex and page-range IPP attributes;
+- the Print window starts on the document's own paper, else on the paper set on OpenPrefs' Printing page (`printer.prefs`), unless another was chosen in the window since that page's paper last changed (`include/oap_paper.h`);
 - host IPP/PDF codec tests;
 - Amiga spool and printer.device smoke-test programs.
 
