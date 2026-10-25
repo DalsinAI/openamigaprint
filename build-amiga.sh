@@ -1,8 +1,12 @@
 #!/bin/sh
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-CC=${AMIGA_CC:-$(command -v m68k-amigaos-gcc || echo m68k-amigaos-gcc)}   # set AMIGA_CC, or have it on PATH
-OUT=${OAP_OUT:-"$ROOT/build/amigaos3"}   # set OAP_OUT to build elsewhere
+# The compiler: AMIGA_CC; else Cradle's stove_build's STOVE (its prefix/bin); else m68k-amigaos-gcc on PATH
+if [ -n "${AMIGA_CC:-}" ]; then CC=$AMIGA_CC
+elif [ -n "${STOVE:-}" ] && [ -x "$STOVE/prefix/bin/m68k-amigaos-gcc" ]; then CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
+else CC=$(command -v m68k-amigaos-gcc || echo m68k-amigaos-gcc); fi
+# Where it builds: OAP_OUT; else Cradle's OUT (so stove_build lists the programs); else build/amigaos3
+OUT=${OAP_OUT:-${OUT:-"$ROOT/build/amigaos3"}}
 mkdir -p "$OUT"
 python3 "$ROOT/tools/make_oap_app_icon.py" "$OUT/OpenPrintTool.info"
 # The 68040, soft float (one program for full and LC/EC 68040s): the specs
