@@ -56,12 +56,19 @@ int oap_parse_ipp_uri(const char *uri,OAPUri *out)
     memcpy(out->path,slash,n+1);
     return 1;
 }
+/* The IPP media name for each OAP_PAPER_ size, in its order (PWG 5101.1 self-describing names). */
+const char *oap_ipp_media(int paper)
+{
+    static const char *const media[OAP_PAPERS]={"iso_a4_210x297mm","na_letter_8.5x11in","na_legal_8.5x14in",
+                                               "iso_a3_297x420mm","iso_a5_148x210mm"};
+    return paper>=0&&paper<OAP_PAPERS?media[paper]:media[OAP_PAPER_A4];
+}
 int oap_ipp_build_prefix(const OAPJobOptions *o,unsigned char *b,size_t c,size_t *out)
 {
     size_t p=0; const char *media,*sides,*colour; unsigned orient;
     unsigned char range[8];
     if(!o||!b||!out)return 0;
-    media=o->paper==OAP_PAPER_LETTER?"na_letter_8.5x11in":"iso_a4_210x297mm";
+    media=oap_ipp_media(o->paper);
     sides=o->duplex==OAP_DUPLEX_LONG?"two-sided-long-edge":o->duplex==OAP_DUPLEX_SHORT?"two-sided-short-edge":"one-sided";
     colour=o->color==OAP_MONO?"monochrome":"color"; orient=o->orientation==OAP_LANDSCAPE?4:3;
     if(!put8(b,c,&p,1)||!put8(b,c,&p,1)||!put16(b,c,&p,0x0002)||!put32(b,c,&p,1))return 0;

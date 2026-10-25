@@ -14,10 +14,11 @@ APP="-m68040 -specs=$ROOT/specs/m68k-soft-m68040.specs -fno-common -O2 -fno-dele
 NET="$ROOT/src/net/conn.c $ROOT/src/net/ipp_client.c $ROOT/src/net/ipp_submit.c $ROOT/src/net/http_auth.c $ROOT/src/net/mdns.c"
 . "$ROOT/scripts/tls-flags.sh"
 # The Print requester: it hands sending to C:OAVWorker, so it has no network
-# code (tls.c without a backend: only the words for a certificate's state).
+# code (tls.c without a backend: only the words for a certificate's state);
+# paper.c is where its paper starts (the .job, OpenPrefs' Printing page, its own).
 "$CC" $APP -I"$ROOT/include" \
   -o "$OUT/OpenPrint" \
-  "$ROOT/src/core/job.c" "$ROOT/src/tls/tls.c" "$ROOT/src/tls/trust.c" \
+  "$ROOT/src/core/job.c" "$ROOT/src/core/paper.c" "$ROOT/src/tls/tls.c" "$ROOT/src/tls/trust.c" \
   "$ROOT/src/amiga/selection_events.c" "$ROOT/src/ui/oap_print_requester.c" "$ROOT/src/ui/oap_gt.c" "$ROOT/src/ui/oap_printers.c" "$ROOT/src/amiga/main.c" "$ROOT/src/amiga/oap_stack.c" "$ROOT/src/viewer/oav_core.c" "$ROOT/src/viewer/oav_jobs.c" -lamiga
 file "$OUT/OpenPrint"
 wc -c "$OUT/OpenPrint"

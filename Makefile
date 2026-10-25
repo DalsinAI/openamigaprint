@@ -5,9 +5,9 @@ CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 CPPFLAGS += -Iinclude
 CORE = src/core/job.c src/core/ipp.c src/core/pdf_demo.c
 
-.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-ipps
+.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-ipps test-paper test-paper-page
 all: test
-test: test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail
+test: test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-paper test-paper-page
 
 build/test_core: tests/test_core.c $(CORE) include/oap.h
 	mkdir -p build
@@ -49,6 +49,19 @@ test-driver: build/test_driver
 test-discovery-sendfail:
 	sh tests/test_discovery_sendfail.sh
 
+# Where the Print window's paper starts (.job, OpenPrefs' Printing page, its own) and each size's IPP media name;
+# writes each paper's Print-Job request start to build/paper-*.ipp (files only, nothing sent).
+build/test_paper: tests/test_paper.c src/core/paper.c src/core/ipp.c src/core/job.c include/oap.h include/oap_paper.h
+	mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/test_paper.c src/core/paper.c src/core/ipp.c src/core/job.c
+test-paper: build/test_paper
+	./build/test_paper
+
+# The Printing page's own writer (openamigaprefs Printing/src/pr_prefs.c) against paper.c's reader; skips with no
+# openamigaprefs checkout beside this one (OPENAMIGAPREFS=dir).
+test-paper-page:
+	sh tests/test_paper_page.sh
+
 # IPPS end to end against printers on 127.0.0.1 (ippeveprinter and a login
 # printer), the OpenTLS backend; skips when ippeveprinter or OpenSSL is missing.
 test-ipps:
@@ -56,3 +69,4 @@ test-ipps:
 
 clean:
 	rm -f build/test_core build/test_discovery build/test_submit build/test_auth build/test_viewer_core build/test_driver build/oap-firstlight.pdf
+	rm -f build/test_paper build/test_paper_page build/paper-*.ipp
