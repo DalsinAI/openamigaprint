@@ -502,9 +502,9 @@ static void draw_preview(void)
         Draw(rp, end, line);
     }
     if (R.pdf_bytes >= 10240)
-        snprintf(caption, sizeof(caption), "PDF, %ld KB", R.pdf_bytes / 1024);
+        snprintf(caption, sizeof(caption), "%s, %ld KB", R.ps ? "PostScript" : "PDF", R.pdf_bytes / 1024);
     else
-        snprintf(caption, sizeof(caption), "PDF, %ld bytes", R.pdf_bytes < 0 ? 0L : R.pdf_bytes);
+        snprintf(caption, sizeof(caption), "%s, %ld bytes", R.ps ? "PostScript" : "PDF", R.pdf_bytes < 0 ? 0L : R.pdf_bytes);
     w = oap_gt_text_w(g, caption);
     oap_gt_text(g, rp, ax + (aw - w) / 2, ay + ah + 2, caption, TEXTPEN, aw);
 }
