@@ -68,7 +68,7 @@ enum {
 
 typedef struct QueueRow {
     char pdf[256], name[64], state[48], printer[96], size[16];
-    int raw;                            /* PostScript, PCL or other bytes a program sent as they are: kept, not sent */
+    int raw;                            /* PCL or other printer data a program sent: kept, not sent (PostScript is sent) */
 } QueueRow;
 
 typedef struct Row {
@@ -567,14 +567,13 @@ static int job_path(const char *doc, char *path, size_t cap)
     return 1;
 }
 
-/* Kinds of document the queue keeps: OpenPrint's PDFs, and what programs sent raw (oapspooler.c). */
+/* Kinds of document the queue keeps: OpenPrint's PDFs, and what programs sent raw (oapspooler.c). PDFs and
+ * PostScript are printed; PCL and other printer data are kept only. */
 static int queued_kind(const char *file, int *raw)
 {
     size_t len = strlen(file);
-    *raw = len > 3 && !strcmp(file + len - 3, ".ps");
-    if (len > 4 && (!strcmp(file + len - 4, ".pcl") || !strcmp(file + len - 4, ".prn")))
-        *raw = 1;
-    return *raw || (len > 4 && !strcmp(file + len - 4, ".pdf"));
+    *raw = len > 4 && (!strcmp(file + len - 4, ".pcl") || !strcmp(file + len - 4, ".prn"));
+    return *raw || (len > 4 && !strcmp(file + len - 4, ".pdf")) || (len > 3 && !strcmp(file + len - 3, ".ps"));
 }
 
 static void read_job(QueueRow *r)
@@ -677,7 +676,7 @@ static void print_job(void)
     if (!r)
         return;
     if (r->raw) {
-        show_status("What a program sent raw (PostScript, PCL) stays in the queue: sending it is still to come");
+        show_status("PCL and other printer data stay in the queue: OpenPrint sends PDF and PostScript");
         return;
     }
     oap_program_path("OpenPrint", program, sizeof(program));

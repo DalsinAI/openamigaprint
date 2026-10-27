@@ -15,7 +15,10 @@
  *     remembered;
  *   - the paper starts on the document's own (its .job), else on OpenPrefs'
  *     Printing page's (printer.prefs), unless one was chosen here since that
- *     page's paper last changed (25 October 2026; include/oap_paper.h).
+ *     page's paper last changed (25 October 2026; include/oap_paper.h);
+ *   - PostScript a program wrote itself (a queued .ps) is sent as it is: the
+ *     printer and copies only, any printer with an address (the worker asks
+ *     it first whether it takes PostScript), no Save as PDF (27 October 2026).
  * Sending stays with C:OAVWorker, and its rules stay: an upload whose outcome
  * is uncertain keeps Print disabled so a job is never sent twice. */
 #include "oap.h"
@@ -25,6 +28,7 @@
 #include "oap_gt.h"
 #include "oap_printers.h"
 #include "oap_selection.h"
+#include "oap_tls.h"
 #include "oav_jobs.h"
 
 #include <exec/types.h>
@@ -98,6 +102,8 @@ static struct PrintRequester {
     int kept, kept_page;                       /* the paper last chosen here (-1 none), and the page's then */
     int paper_chosen;                          /* the paper was chosen in this window */
     int busy, sent, percent, finished, ticks;
+    int ps;                                    /* the document is PostScript: sent as it is */
+    char name[96];                             /* what it is called: the PostScript's %%Title, or job_title() */
 } R;
 
 #define copy oap_copy
@@ -124,16 +130,17 @@ static const char *base_name(const char *path)
     return p && *p ? p : path;
 }
 
-/* A queued PDF's .job names what was printed ("title="); else the file's name. */
+/* A queued document's .job names what was printed ("title="); else the file's name. */
 static const char *job_title(const char *pdf)
 {
     static char title[120];
     char path[300], line[300];
-    size_t n = strlen(pdf);
+    const char *dot = strrchr(pdf, '.');
+    size_t n = dot ? (size_t)(dot - pdf) : 0;
     FILE *f;
-    if (n > 4 && n < sizeof(path) && !strcmp(pdf + n - 4, ".pdf")) {
-        strcpy(path, pdf);
-        strcpy(path + n - 4, ".job");
+    if (dot && (!strcmp(dot, ".pdf") || !strcmp(dot, ".ps")) && n + 5 < sizeof(path)) {
+        memcpy(path, pdf, n);
+        strcpy(path + n, ".job");
         if ((f = fopen(path, "r"))) {
             while (fgets(line, sizeof(line), f))
                 if (!strncmp(line, "title=", 6) && line[6] && line[6] != '\n') {
@@ -222,8 +229,15 @@ static const OAPPrinter *chosen(void)
     return &R.printers.printer[R.offered[R.row]];
 }
 
-/* Save as PDF file and every printer verified to take PDF; `uri` is
- * selected when it is offered. */
+/* PostScript may go to any printer with an address, PDF or not: the worker asks it first whether it takes
+ * PostScript. Over ipps:// only with its certificate accepted. */
+static int raw_ok(const OAPPrinter *p)
+{
+    return !oap_printer_is_file(p) && (!strncmp(p->uri, "ipp://", 6) || (oap_printer_is_secure(p) && oap_cert_usable(p->cert)));
+}
+
+/* Save as PDF file and every printer verified to take PDF (for PostScript,
+ * every printer raw_ok); `uri` is selected when it is offered. */
 static void fill_printers(const char *uri)
 {
     int i;
@@ -232,7 +246,7 @@ static void fill_printers(const char *uri)
     R.row = 0;
     for (i = 0; i < R.printers.count && R.offered_count < OAP_PRINTERS_MAX; i++) {
         const OAPPrinter *p = &R.printers.printer[i];
-        if (!oap_printer_is_file(p) && !oap_printer_ready(p))
+        if (R.ps ? !raw_ok(p) : !oap_printer_is_file(p) && !oap_printer_ready(p))
             continue;
         if (uri && !strcmp(p->uri, uri))
             R.row = R.offered_count;
@@ -240,6 +254,10 @@ static void fill_printers(const char *uri)
         R.printer_labels[R.offered_count++] = (STRPTR)p->name;
     }
     R.printer_labels[R.offered_count] = NULL;
+    if (!R.offered_count) {                    /* PostScript and no printer known: the cycle still needs a label */
+        R.printer_labels[0] = (STRPTR)"No printer: Find printers...";
+        R.printer_labels[1] = NULL;
+    }
 }
 
 /* The line under the printer, for printer p (NULL: none chosen); layout() measures it for every printer offered. */
@@ -247,6 +265,8 @@ static void info_for(const OAPPrinter *p, char *out, size_t n)
 {
     if (!p)
         copy(out, n, "No printer chosen");
+    else if (R.ps)
+        copy(out, n, "PostScript, sent as it is, if the printer says it takes it");
     else if (oap_printer_is_file(p))
         copy(out, n, "Print saves the document as a PDF file on this Amiga");
     else if (oap_printer_is_secure(p))
@@ -392,19 +412,20 @@ static void build(void)
         p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + cx + nw + 2, by + G->y_copies, gh + 4, gh, "-", G_LESS, PLACETEXT_IN, 0), TAG_DONE);
         p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + cx + nw + gh + 8, by + G->y_copies, gh + 4, gh, "+", G_MORE, PLACETEXT_IN, 0), TAG_DONE);
         p = CreateGadget(MX_KIND, p, oap_gt_ng(g, bx + cx, by + G->y_pages, 17, 9, NULL, G_PAGES, PLACETEXT_RIGHT, 0),
-                         GTMX_Labels, (ULONG)pages_labels, GTMX_Active, R.pages, GTMX_Spacing, G->mx_pitch - (g->fh > 9 ? g->fh : 9), TAG_DONE);
+                         GTMX_Labels, (ULONG)pages_labels, GTMX_Active, R.pages, GTMX_Spacing, G->mx_pitch - (g->fh > 9 ? g->fh : 9),
+                         GA_Disabled, R.ps, TAG_DONE);
         {
             int sx = cx + 17 + 8 + oap_gt_text_w(g, "Range") + OAP_GT_GAP;
             int sy = G->y_pages + G->mx_pitch - (gh - (g->fh > 9 ? g->fh : 9)) / 2 - 1;
             p = CreateGadget(STRING_KIND, p, oap_gt_ng(g, bx + sx, by + sy, G->rx + G->rw - OAP_GT_INSET - sx, gh, NULL, G_RANGE, 0, 0),
-                             GTST_String, (ULONG)R.range_text, GTST_MaxChars, 15, GA_Disabled, !R.pages, TAG_DONE);
+                             GTST_String, (ULONG)R.range_text, GTST_MaxChars, 15, GA_Disabled, !R.pages || R.ps, TAG_DONE);
         }
     }
     /* paper */
     for (i = 0; i < 4; i++)
         p = CreateGadget(CYCLE_KIND, p, oap_gt_ng(g, bx + G->rx + OAP_GT_INSET + G->label_w + OAP_GT_GAP, by + G->y_paper + i * (gh + 4),
                          G->rw - 2 * OAP_GT_INSET - G->label_w - OAP_GT_GAP, gh, cycle_names[i], (UWORD)(G_PAPER + i), PLACETEXT_LEFT, 0),
-                         GTCY_Labels, (ULONG)cycles[i], GTCY_Active, actives[i], GT_Underscore, '_', TAG_DONE);
+                         GTCY_Labels, (ULONG)cycles[i], GTCY_Active, actives[i], GT_Underscore, '_', GA_Disabled, R.ps, TAG_DONE);
     /* status, then the buttons */
     p = CreateGadget(TEXT_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN, by + G->y_status, iw - G->prog_w - OAP_GT_GAP, gh, NULL, G_STATUS, 0, 0),
                      GTTX_Text, (ULONG)R.status_text, GTTX_Border, TRUE, GTTX_CopyText, TRUE, TAG_DONE);
@@ -412,7 +433,7 @@ static void build(void)
     p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN, by + G->y_buttons, bw, gh, file ? "_Save..." : "_Print", G_PRINT, PLACETEXT_IN, 0),
                      GT_Underscore, '_', GA_Disabled, R.busy || R.sent, TAG_DONE);
     p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN + bw + OAP_GT_GAP, by + G->y_buttons, bw, gh, "Save as P_DF...", G_SAVE, PLACETEXT_IN, 0),
-                     GT_Underscore, '_', GA_Disabled, R.busy || file, TAG_DONE);
+                     GT_Underscore, '_', GA_Disabled, R.busy || file || R.ps, TAG_DONE);
     p = CreateGadget(BUTTON_KIND, p, oap_gt_ng(g, bx + OAP_GT_MARGIN + 2 * (bw + OAP_GT_GAP), by + G->y_buttons, iw - 2 * (bw + OAP_GT_GAP), gh,
                      R.busy ? "_Stop" : R.finished ? "_Close" : "_Cancel", G_CANCEL, PLACETEXT_IN, 0), GT_Underscore, '_', TAG_DONE);
     (void)p;
@@ -481,9 +502,9 @@ static void draw_preview(void)
         Draw(rp, end, line);
     }
     if (R.pdf_bytes >= 10240)
-        snprintf(caption, sizeof(caption), "PDF, %ld KB", R.pdf_bytes / 1024);
+        snprintf(caption, sizeof(caption), "%s, %ld KB", R.ps ? "PostScript" : "PDF", R.pdf_bytes / 1024);
     else
-        snprintf(caption, sizeof(caption), "PDF, %ld bytes", R.pdf_bytes < 0 ? 0L : R.pdf_bytes);
+        snprintf(caption, sizeof(caption), "%s, %ld bytes", R.ps ? "PostScript" : "PDF", R.pdf_bytes < 0 ? 0L : R.pdf_bytes);
     w = oap_gt_text_w(g, caption);
     oap_gt_text(g, rp, ax + (aw - w) / 2, ay + ah + 2, caption, TEXTPEN, aw);
 }
@@ -637,6 +658,8 @@ static void print_now(void)
         save_pdf();
         return;
     }
+    if (R.ps)                                  /* the printer's queue shows it by this name */
+        copy(R.options->job_name, sizeof(R.options->job_name), R.name);
     memset(&job, 0, sizeof(job));
     oav_layout_defaults(&job.layout);
     copy(job.source, sizeof(job.source), R.pdf);
@@ -644,6 +667,8 @@ static void print_now(void)
     copy(job.uri, sizeof(job.uri), R.options->printer_uri);
     job.has_print_options = 1;
     job.print = *R.options;
+    if (!R.ps)                                 /* a PDF goes unnamed, as before: naming PDFs is for its own change */
+        job.print.job_name[0] = 0;
     if (oav_submit(&job, R.request, sizeof(R.request), text, sizeof(text))) {
         R.busy = 1;
         R.percent = 0;
@@ -736,6 +761,8 @@ static void key(UWORD code, UWORD qual, int *done)
         stop_or_close(done);
         return;
     }
+    if (R.ps && code < 128 && strchr("dzliuag", code | 0x20))    /* PostScript keeps its own pages and paper */
+        return;
     switch (code | 0x20) {
     case 'p': if (!R.busy && !R.sent) print_now(); break;
     case 'd': if (!R.busy && !(chosen() && oap_printer_is_file(chosen()))) save_pdf(); break;
@@ -787,6 +814,17 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
     R.pdf = pdf;
     R.options = o;
     R.pdf_bytes = file_size(pdf);
+    {
+        static unsigned char head[4096];
+        FILE *f = fopen(pdf, "rb");
+        size_t got = f ? fread(head, 1, sizeof(head), f) : 0;
+        const char *format = oap_document_format(head, got);
+        if (f)
+            fclose(f);
+        R.ps = format && !strcmp(format, OAP_FORMAT_PS);
+        if (!R.ps || !oap_ps_title(head, got, R.name, sizeof(R.name)))
+            copy(R.name, sizeof(R.name), job_title(pdf));
+    }
     for (i = 0; i < OAP_PAPERS; i++)
         paper_labels[i] = (STRPTR)oap_paper_label(i);
     paper_labels[OAP_PAPERS] = NULL;
@@ -800,7 +838,7 @@ int oap_run_print_dialog(const char *pdf, OAPJobOptions *o)
     copy(R.status_text, sizeof(R.status_text), R.pdf_bytes >= 0 ? "Ready" : "The document to print can't be read");
     if (!open_libraries() || !oap_gt_open(&R.g))
         goto out;
-    snprintf(title, sizeof(title), "Print: %s", job_title(pdf));
+    snprintf(title, sizeof(title), "Print: %s%s", R.name, R.ps && !strstr(R.name, "PostScript") ? " (PostScript)" : "");
 
     /* start on the printer the job asked for, else the default */
     copy(start, sizeof(start), o->printer_uri);

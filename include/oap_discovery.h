@@ -15,7 +15,9 @@
 #define OAP_DISC_SAVED_OLD "ENVARC:OpenAmigaPrint/PrinterURI"
 enum { OAP_PDF_UNKNOWN=0, OAP_PDF_YES=1, OAP_PDF_NO=2 };
 typedef struct OAPName { unsigned char wire[256]; size_t len; } OAPName;
-typedef struct OAPCaps { int pdf, accepting, state, color, duplex; unsigned status; uint32_t job_id; char name[128], model[128], location[128], reasons[256]; } OAPCaps;
+/* pdf and ps: OAP_PDF_YES when document-format-supported lists application/pdf (application/postscript), _NO when
+ * it lists others but not that one, _UNKNOWN when the printer didn't say. */
+typedef struct OAPCaps { int pdf, ps, accepting, state, color, duplex; unsigned status; uint32_t job_id; char name[128], model[128], location[128], reasons[256]; } OAPCaps;
 typedef struct OAPDiscovered { OAPName service, target; char label[128], host[256], ip[16], path[256], uri[640], note[256]; unsigned port; int secure, have_srv, have_txt, alive; OAPCaps caps;
     int cert;                       /* ipps://: OAP_CERT_* (oap_tls.h), what the check found */
     char fingerprint[96], cert_subject[128];

@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 AmigaChrome Team. SPDX-License-Identifier: MIT */
-/* IPP Print-Job of a PDF to an ipp:// or ipps:// printer (include/oap.h). */
+/* IPP Print-Job of a PDF, or of a program's own PostScript, to an ipp:// or ipps:// printer (include/oap.h). */
 #include "oap.h"
 #include "oap_net.h"
 #include <stdio.h>
@@ -38,9 +38,10 @@ static void untrusted(const OAPTlsInfo *tls, char *status, size_t cap)
         snprintf(status, cap, "Not sent: %s", oap_cert_words(tls->verdict));
 }
 
-int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
-                        char *status, size_t cap,
-                        OAPSendProgress notify, void *ctx)
+/* want: the one format the caller sends (OAP_FORMAT_PDF), or NULL for a PDF or PostScript, by its first bytes. */
+static int submit(const char *pdf, const char *want, const OAPJobOptions *o,
+                  char *status, size_t cap,
+                  OAPSendProgress notify, void *ctx)
 {
     SendWorkspace *s = NULL;
     FILE *f = NULL;
@@ -49,7 +50,8 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
     long flen = 0;
     unsigned long uploaded = 0;
     OAPConn *conn = NULL;
-    int result = OAP_SEND_ERROR, attempted = 0, tries;
+    int result = OAP_SEND_ERROR, attempted = 0, tries, ps;
+    const char *format, *kind;
     if (!pdf || !o || !status || !cap) return OAP_SEND_ERROR;
     status[0] = 0;
     s = calloc(1, sizeof(*s));
@@ -59,12 +61,27 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
     }
     if (!progress(notify, ctx, "preparing", 0, 0)) goto cancelled;
     f = fopen(pdf, "rb");
-    if (!f) { snprintf(status, cap, "Cannot open PDF spool file"); goto done; }
-    if (fseek(f, 0, SEEK_END) || (flen = ftell(f)) < 5 || fseek(f, 0, SEEK_SET)) {
-        snprintf(status, cap, "Cannot measure PDF"); goto done;
+    if (!f) { snprintf(status, cap, "%s", want ? "Cannot open PDF spool file" : "Cannot open the document to print"); goto done; }
+    if (fseek(f, 0, SEEK_END) || (flen = ftell(f)) < 2 || fseek(f, 0, SEEK_SET)) {
+        snprintf(status, cap, "Cannot measure %s", want ? "PDF" : "the document"); goto done;
     }
-    if (fread(s->chunk, 1, 5, f) != 5 || memcmp(s->chunk, "%PDF-", 5) || fseek(f, 0, SEEK_SET)) {
-        snprintf(status, cap, "Source is not a PDF document"); goto done;
+    /* what it is, and a PostScript document's own name, from its first 4 KB */
+    n = fread(s->chunk, 1, 4096, f);
+    format = oap_document_format(s->chunk, n);
+    if (!format || (want && strcmp(format, want)) || fseek(f, 0, SEEK_SET)) {
+        snprintf(status, cap, "%s", want ? "Source is not a PDF document"
+                 : "Not sent: OpenPrint sends PDF and PostScript to printers, and this is neither");
+        goto done;
+    }
+    ps = !strcmp(format, OAP_FORMAT_PS);
+    kind = ps ? "PostScript" : "PDF";
+    s->effective = *o;
+    if (ps && oap_ps_title(s->chunk, n, s->note, sizeof(s->effective.job_name)))
+        memcpy(s->effective.job_name, s->note, sizeof(s->effective.job_name));
+    else if (ps && !s->effective.job_name[0]) {            /* no name given: the file's */
+        const char *base = pdf + strlen(pdf);
+        while (base > pdf && base[-1] != '/' && base[-1] != ':') base--;
+        snprintf(s->effective.job_name, sizeof(s->effective.job_name), "%s", base);
     }
     if (!progress(notify, ctx, "checking", 0, (unsigned long)flen)) goto cancelled;
     if (!oap_net_start()) { snprintf(status, cap, "bsdsocket.library is not available"); goto done; }
@@ -72,18 +89,24 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
         if (s->uri.secure && s->tls.verdict == OAP_CERT_NOTLS)
             untrusted(&s->tls, status, cap);
         else
-            snprintf(status, cap, "PDF not confirmed: %.180s", s->note);
+            snprintf(status, cap, "%s not confirmed: %.180s", kind, s->note);
         goto done;
     }
     if (s->uri.secure && !oap_cert_usable(s->tls.verdict)) { untrusted(&s->tls, status, cap); goto done; }
-    if (s->capabilities.pdf != OAP_PDF_YES) { snprintf(status, cap, "PDF not confirmed: %.180s", s->note); goto done; }
+    if (ps && s->capabilities.ps != OAP_PDF_YES) {
+        /* asked first, so a printer that can't read PostScript is never sent it (it might print pages of code) */
+        snprintf(status, cap, s->capabilities.ps == OAP_PDF_NO
+                 ? "Not sent: this printer doesn't take PostScript (application/postscript isn't among its formats)"
+                 : "Not sent: the printer didn't say which formats it takes, so PostScript isn't confirmed");
+        goto done;
+    }
+    if (!ps && s->capabilities.pdf != OAP_PDF_YES) { snprintf(status, cap, "PDF not confirmed: %.180s", s->note); goto done; }
     if (s->capabilities.accepting == 0) { snprintf(status, cap, "Printer is not accepting jobs"); goto done; }
-    s->effective = *o;
     if (!s->capabilities.color) s->effective.color = OAP_MONO;
-    if (s->effective.duplex != OAP_SIMPLEX && !s->capabilities.duplex) {
+    if (!ps && s->effective.duplex != OAP_SIMPLEX && !s->capabilities.duplex) {
         snprintf(status, cap, "Printer has not confirmed duplex; choose one-sided"); goto done;
     }
-    if (!oap_ipp_build_prefix(&s->effective, s->prefix, sizeof(s->prefix), &plen)) {
+    if (!oap_ipp_build_prefix_doc(&s->effective, format, s->prefix, sizeof(s->prefix), &plen)) {
         snprintf(status, cap, "Cannot encode IPP print job"); goto done;
     }
     body = malloc(OAP_BODY_MAX);
@@ -112,7 +135,7 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
             }
             authorization = s->authorization;
         }
-        if (fseek(f, 0, SEEK_SET)) { snprintf(status, cap, "Cannot read the PDF again"); goto done; }
+        if (fseek(f, 0, SEEK_SET)) { snprintf(status, cap, "Cannot read the %s again", kind); goto done; }
         uploaded = 0;
         if (!progress(notify, ctx, "uploading", 0, (unsigned long)flen)) goto cancelled;
         /* Once transmission starts, a lost reply must never become an automatic retry. */
@@ -124,12 +147,12 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
         while ((n = fread(s->chunk, 1, sizeof(s->chunk), f)) != 0) {
             if (!progress(notify, ctx, "uploading", uploaded, (unsigned long)flen)) goto cancelled;
             if (!oap_conn_write(conn, s->chunk, n, 5)) {
-                snprintf(status, cap, "Submission uncertain: PDF upload interrupted; check printer"); goto done;
+                snprintf(status, cap, "Submission uncertain: %s upload interrupted; check printer", kind); goto done;
             }
             uploaded += (unsigned long)n;
         }
         if (ferror(f) || uploaded != (unsigned long)flen) {
-            snprintf(status, cap, "Submission uncertain: PDF read length changed"); goto done;
+            snprintf(status, cap, "Submission uncertain: %s read length changed", kind); goto done;
         }
         if (!progress(notify, ctx, "awaiting-reply", uploaded, (unsigned long)flen)) goto cancelled;
         s->note[0] = 0;
@@ -154,6 +177,8 @@ int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o,
         attempted = 0;
         if (code == 0x0507)
             snprintf(status, cap, "Not printed: the printer is busy with another job. Try again in a moment.");
+        else if (code == 0x040a)
+            snprintf(status, cap, "Not printed: the printer doesn't take %s (IPP status 0x040a)", kind);
         else
             snprintf(status, cap, "Not printed: the printer refused the job (IPP status 0x%04x)", code);
         goto done;
@@ -178,4 +203,16 @@ done:
     if (f) fclose(f);
     free(s);
     return result;
+}
+
+int oap_ipp_submit_pdf_ex(const char *pdf, const OAPJobOptions *o, char *status, size_t cap,
+                          OAPSendProgress notify, void *ctx)
+{
+    return submit(pdf, OAP_FORMAT_PDF, o, status, cap, notify, ctx);
+}
+
+int oap_ipp_submit_doc_ex(const char *path, const OAPJobOptions *o, char *status, size_t cap,
+                          OAPSendProgress notify, void *ctx)
+{
+    return submit(path, NULL, o, status, cap, notify, ctx);
 }

@@ -29,6 +29,7 @@ int oav_submit(const OAVRequest *r,char *request,size_t cap,char *err,size_t err
  f=fdopen(fd,"w");if(!f){close(fd);remove(path);copystr(err,errcap,"Cannot write request");return 0;}
  fprintf(f,"schema=3\naction=%s\nsource=%s\noutput=%s\nuri=%s\npaper=%d\nlandscape=%d\nscale=%d\nmargin_cpt=%ld\n",r->action,r->source,r->output,r->uri,r->layout.paper,r->layout.landscape,r->layout.scale,r->layout.margin_cpt);
  if(r->has_print_options)fprintf(f,"print_options=1\ncopies=%d\nprint_paper=%d\norientation=%d\ncolor=%d\nduplex=%d\npage_start=%d\npage_end=%d\n",r->print.copies,r->print.paper,r->print.orientation,r->print.color,r->print.duplex,r->print.page_start,r->print.page_end);
+ if(r->has_print_options&&oav_safe_field(r->print.job_name))fprintf(f,"job_name=%s\n",r->print.job_name);
  {int bad=ferror(f);if(fclose(f))bad=1;if(bad){remove(path);copystr(err,errcap,"Request write failed");return 0;}}
  snprintf(cmd,sizeof(cmd),"Stack 65536\nC:OAVWorker %s",path);
  rc=SystemTags((STRPTR)cmd,SYS_Asynch,TRUE,NP_StackSize,65536,SYS_InName,(ULONG)"NIL:",SYS_OutName,(ULONG)"NIL:",TAG_DONE);
@@ -58,6 +59,7 @@ int oav_read_request(const char *path,OAVRequest *r)
   else if(!strcmp(line,"duplex"))r->print.duplex=atoi(v);
   else if(!strcmp(line,"page_start"))r->print.page_start=atoi(v);
   else if(!strcmp(line,"page_end"))r->print.page_end=atoi(v);
+  else if(!strcmp(line,"job_name"))copystr(r->print.job_name,sizeof(r->print.job_name),v);
  }
  fclose(f);if(r->has_print_options&&(r->print.copies<1||r->print.copies>999||r->print.paper<0||r->print.paper>=OAP_PAPERS||r->print.orientation<0||r->print.orientation>1||r->print.color<0||r->print.color>1||r->print.duplex<0||r->print.duplex>2||r->print.page_start<0||r->print.page_end<r->print.page_start))return 0;
  return (schema==2||schema==3)&&oav_safe_field(r->source);
@@ -90,8 +92,10 @@ int oav_update_queue_state(const char *pdf,const char *state,const char *uri,con
 {
  char path[OAV_PATH_MAX+16],tmp[OAV_PATH_MAX+24],line[1024];FILE *in,*out;size_t n;int bad=0;
  if(!pdf||strncmp(pdf,OAP_QUEUE_DIR "/",strlen(OAP_QUEUE_DIR "/")))return 1;
- n=strlen(pdf);if(n<4||n>=OAV_PATH_MAX||strcmp(pdf+n-4,".pdf"))return 0;
- strcpy(path,pdf);strcpy(path+n-4,".job");snprintf(tmp,sizeof(tmp),"%s.tmp",path);
+ /* the document's .job: job-0001.pdf's, or a program's PostScript job-0002.ps's */
+ n=strlen(pdf);if(n>=OAV_PATH_MAX)return 0;
+ if(n>4&&!strcmp(pdf+n-4,".pdf"))n-=4;else if(n>3&&!strcmp(pdf+n-3,".ps"))n-=3;else return 0;
+ memcpy(path,pdf,n);strcpy(path+n,".job");snprintf(tmp,sizeof(tmp),"%s.tmp",path);
  in=fopen(path,"r");out=fopen(tmp,"w");if(!out){if(in)fclose(in);return 0;}
  if(in){while(fgets(line,sizeof(line),in)){if(strncmp(line,"state=",6)&&strncmp(line,"printer=",8)&&strncmp(line,"message=",8))fputs(line,out);}if(ferror(in))bad=1;fclose(in);}
  else fprintf(out,"pdf=%s\n",pdf);

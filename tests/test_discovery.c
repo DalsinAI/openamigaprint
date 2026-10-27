@@ -14,6 +14,10 @@ int main(void){unsigned char ipp[1024],http[4096],out[2048],pkt[2048],rd[512];OA
  n=response(ipp,"application/pdf-invalid");CHECK(oap_ipp_parse_caps(ipp,n,42,&caps));CHECK(caps.pdf==OAP_PDF_NO);
  n=response(ipp,NULL);CHECK(oap_ipp_parse_caps(ipp,n,42,&caps));CHECK(caps.pdf==OAP_PDF_NO);
  memset(ipp,0,9);ipp[0]=1;ipp[7]=42;ipp[8]=3;CHECK(oap_ipp_parse_caps(ipp,9,42,&caps));CHECK(caps.pdf==OAP_PDF_UNKNOWN);
+ /* PostScript, for a program's own (27 Oct 2026): listed, not listed, not said */
+ CHECK(caps.ps==OAP_PDF_UNKNOWN);n=response(ipp,"application/postscript");CHECK(oap_ipp_parse_caps(ipp,n,42,&caps));CHECK(caps.ps==OAP_PDF_YES&&caps.pdf==OAP_PDF_NO);
+ n=response(ipp,"application/pdf");CHECK(oap_ipp_parse_caps(ipp,n,42,&caps));CHECK(caps.ps==OAP_PDF_NO&&caps.pdf==OAP_PDF_YES);
+ n=response(ipp,"application/postscript-x");CHECK(oap_ipp_parse_caps(ipp,n,42,&caps));CHECK(caps.ps==OAP_PDF_NO);
  n=response(ipp,"application/pdf");ipp[2]=4;CHECK(!oap_ipp_parse_caps(ipp,n,42,&caps));ipp[2]=0;
  hn=(size_t)sprintf((char *)http,"HTTP/1.1 200 OK\r\nContent-Type: application/ipp\r\nContent-Length: %lu\r\n\r\n",(unsigned long)n);memcpy(http+hn,ipp,n);hn+=n;for(i=0;i<hn;i++)CHECK(oap_http_response(http,i,0,out,sizeof(out),&bn,&status)==0);CHECK(oap_http_response(http,hn,0,out,sizeof(out),&bn,&status)==1);CHECK(bn==n&&!memcmp(ipp,out,n));CHECK(oap_http_response(http,hn-1,1,out,sizeof(out),&bn,&status)==-1);
  hn=(size_t)sprintf((char *)http,"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Type: application/ipp\r\nTransfer-Encoding: chunked\r\n\r\n%lx\r\n",(unsigned long)n);memcpy(http+hn,ipp,n);hn+=n;memcpy(http+hn,"\r\n0\r\n\r\n",7);hn+=7;for(i=0;i<hn;i++)CHECK(oap_http_response(http,i,0,out,sizeof(out),&bn,&status)==0);CHECK(oap_http_response(http,hn,0,out,sizeof(out),&bn,&status)==1);CHECK(bn==n&&!memcmp(ipp,out,n));
