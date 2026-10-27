@@ -101,7 +101,8 @@ static int head_is(const char *s)
 }
 static int is_pdf(void){return head_is("%PDF");}
 /* What a job is, from its first bytes: a PDF (OpenPrint's driver), PostScript, PCL (or PJL), or raw printer
- * data. Raw jobs are kept, not sent: sending PostScript to printers that take it is to come. */
+ * data (as oap_document_format, src/core/job.c). PDFs and PostScript are printed from the queue (PostScript to
+ * printers that say they take it); PCL and other data are kept, not sent. */
 static void kind(const char **ext,const char **format,const char **title)
 {
     if(is_pdf()){*ext=".pdf";*format="application/pdf";*title=0;}

@@ -5,7 +5,7 @@ CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 CPPFLAGS += -Iinclude
 CORE = src/core/job.c src/core/ipp.c src/core/pdf_demo.c
 
-.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-ipps test-paper test-paper-page
+.PHONY: all test clean test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-ipps test-paper test-paper-page test-rawps
 all: test
 test: test-core test-discovery test-submit test-auth test-viewer test-driver test-discovery-sendfail test-paper test-paper-page
 
@@ -67,6 +67,12 @@ test-paper-page:
 test-ipps:
 	sh tests/host/test_ipps.sh
 
+# Raw PostScript end to end against stand-in printers on 127.0.0.1 (tests/host/ps_printer.py; ippeveprinter
+# too when installed): byte for byte, its attributes, refusals and no hang. Prints nothing; skips with no python3.
+test-rawps:
+	sh tests/test_rawps.sh
+
 clean:
 	rm -f build/test_core build/test_discovery build/test_submit build/test_auth build/test_viewer_core build/test_driver build/oap-firstlight.pdf
 	rm -f build/test_paper build/test_paper_page build/paper-*.ipp
+	rm -rf build/rawps

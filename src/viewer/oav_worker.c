@@ -61,7 +61,7 @@ static int print_progress(void *opaque,const char *stage,unsigned long sent,unsi
  if(is_cancelled(&p->cancel))return 0;
  if(!changed&&sent<p->last_bytes+524288UL&&sent!=total)return 1;
  if(!strcmp(stage,"uploading"))snprintf(text,sizeof(text),"Uploading %lu%% (%lu / %lu KiB)",total?(sent==total?100UL:sent/(total/100UL+1)):0UL,sent/1024UL,total/1024UL);
- else snprintf(text,sizeof(text),"%s",!strcmp(stage,"checking")?"Checking printer PDF capability":!strcmp(stage,"connecting")?"Connecting to selected printer":!strcmp(stage,"awaiting-reply")?"Upload complete; waiting for printer job ID":"Preparing PDF submission");
+ else snprintf(text,sizeof(text),"%s",!strcmp(stage,"checking")?"Checking what the printer takes":!strcmp(stage,"connecting")?"Connecting to selected printer":!strcmp(stage,"awaiting-reply")?"Upload complete; waiting for printer job ID":"Preparing the document");
  result(p->request,stage,text);
  if(changed)oav_update_queue_state(p->source,stage,p->uri,text);
  oap_copy(p->stage,sizeof(p->stage),stage);p->last_bytes=sent;return 1;
@@ -98,7 +98,7 @@ static int worker_main(int argc,char **argv)
   oap_copy(o.printer_uri,sizeof(o.printer_uri),r.uri);
   memset(&progress,0,sizeof(progress));progress.request=argv[1];progress.source=r.source;progress.uri=r.uri;
   snprintf(progress.cancel.cancel,sizeof(progress.cancel.cancel),"%s.cancel",argv[1]);
-  rc=oap_ipp_submit_pdf_ex(r.source,&o,msg,sizeof(msg),print_progress,&progress);
+  rc=oap_ipp_submit_doc_ex(r.source,&o,msg,sizeof(msg),print_progress,&progress);   /* a PDF, or a program's PostScript */
   state=rc==OAP_SEND_ACCEPTED?"submitted":rc==OAP_SEND_UNCERTAIN?"uncertain":rc==OAP_SEND_CANCELLED?"cancelled":"error";
   oav_update_queue_state(r.source,state,r.uri,msg);result(argv[1],state,msg);
   return rc==OAP_SEND_ACCEPTED?0:rc==OAP_SEND_CANCELLED?5:20;

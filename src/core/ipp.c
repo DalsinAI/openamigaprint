@@ -63,11 +63,35 @@ const char *oap_ipp_media(int paper)
                                                "iso_a3_297x420mm","iso_a5_148x210mm"};
     return paper>=0&&paper<OAP_PAPERS?media[paper]:media[OAP_PAPER_A4];
 }
+/* job-name in UTF-8, as attributes-charset says. Amiga text is Latin-1: a name that isn't UTF-8 already is
+ * taken as Latin-1 (an ASCII name is the same bytes either way). */
+static size_t utf8_name(const char *s,unsigned char *out,size_t cap)
+{
+    const unsigned char *p=(const unsigned char *)s;size_t i=0,j,k,n=0;int utf8=1;
+    while(p[i]&&utf8){
+        k=p[i]<0x80?0:(p[i]&0xe0)==0xc0?1:(p[i]&0xf0)==0xe0?2:(p[i]&0xf8)==0xf0?3:4;
+        if(k==4)utf8=0;
+        for(j=1;utf8&&j<=k;j++)if((p[i+j]&0xc0)!=0x80)utf8=0;
+        i+=k+1;
+    }
+    for(i=0;p[i]&&n+2<=cap;i++){
+        if(utf8||p[i]<0x80)out[n++]=p[i];
+        else{out[n++]=(unsigned char)(0xc0|p[i]>>6);out[n++]=(unsigned char)(0x80|(p[i]&0x3f));}
+    }
+    return n;
+}
 int oap_ipp_build_prefix(const OAPJobOptions *o,unsigned char *b,size_t c,size_t *out)
 {
-    size_t p=0; const char *media,*sides,*colour; unsigned orient;
-    unsigned char range[8];
-    if(!o||!b||!out)return 0;
+    return oap_ipp_build_prefix_doc(o,OAP_FORMAT_PDF,b,c,out);
+}
+int oap_ipp_build_prefix_doc(const OAPJobOptions *o,const char *format,unsigned char *b,size_t c,size_t *out)
+{
+    size_t p=0,nl; const char *media,*sides,*colour; unsigned orient; int ps;
+    unsigned char range[8],name[256];
+    if(!o||!b||!out||!format)return 0;
+    ps=!strcmp(format,OAP_FORMAT_PS);
+    if(!ps&&strcmp(format,OAP_FORMAT_PDF))return 0;
+    nl=utf8_name(o->job_name,name,sizeof(name));
     media=oap_ipp_media(o->paper);
     sides=o->duplex==OAP_DUPLEX_LONG?"two-sided-long-edge":o->duplex==OAP_DUPLEX_SHORT?"two-sided-short-edge":"one-sided";
     colour=o->color==OAP_MONO?"monochrome":"color"; orient=o->orientation==OAP_LANDSCAPE?4:3;
@@ -77,19 +101,22 @@ int oap_ipp_build_prefix(const OAPJobOptions *o,unsigned char *b,size_t c,size_t
     if(!attr_s(b,c,&p,0x48,"attributes-natural-language","en"))return 0;
     if(!attr_s(b,c,&p,0x45,"printer-uri",o->printer_uri))return 0;
     if(!attr_s(b,c,&p,0x42,"requesting-user-name","OpenPrint"))return 0;
-    if(!attr_s(b,c,&p,0x42,"job-name",o->job_name))return 0;
-    if(!attr_s(b,c,&p,0x49,"document-format","application/pdf"))return 0;
+    if(!attr(b,c,&p,0x42,"job-name",name,nl))return 0;
+    if(!attr_s(b,c,&p,0x49,"document-format",format))return 0;
     if(!put8(b,c,&p,0x02))return 0;
     if(!attr_i(b,c,&p,0x21,"copies",o->copies>0?(unsigned long)o->copies:1))return 0;
-    if(!attr_s(b,c,&p,0x44,"media",media))return 0;
-    if(!attr_i(b,c,&p,0x23,"orientation-requested",orient))return 0;
-    if(!attr_s(b,c,&p,0x44,"print-color-mode",colour))return 0;
-    if(!attr_s(b,c,&p,0x44,"sides",sides))return 0;
-    if(o->page_start>0 && o->page_end>=o->page_start){
-        unsigned long a=o->page_start,z=o->page_end;
-        range[0]=a>>24;range[1]=a>>16;range[2]=a>>8;range[3]=a;
-        range[4]=z>>24;range[5]=z>>16;range[6]=z>>8;range[7]=z;
-        if(!attr(b,c,&p,0x33,"page-ranges",range,8))return 0;
+    /* PostScript: its own setpagedevice says the paper, the sides and the pages; the printer's defaults do the rest */
+    if(!ps){
+        if(!attr_s(b,c,&p,0x44,"media",media))return 0;
+        if(!attr_i(b,c,&p,0x23,"orientation-requested",orient))return 0;
+        if(!attr_s(b,c,&p,0x44,"print-color-mode",colour))return 0;
+        if(!attr_s(b,c,&p,0x44,"sides",sides))return 0;
+        if(o->page_start>0 && o->page_end>=o->page_start){
+            unsigned long a=o->page_start,z=o->page_end;
+            range[0]=a>>24;range[1]=a>>16;range[2]=a>>8;range[3]=a;
+            range[4]=z>>24;range[5]=z>>16;range[6]=z>>8;range[7]=z;
+            if(!attr(b,c,&p,0x33,"page-ranges",range,8))return 0;
+        }
     }
     if(!put8(b,c,&p,0x03))return 0;
     *out=p; return 1;

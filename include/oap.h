@@ -31,8 +31,22 @@ typedef struct OAPUri {
 } OAPUri;
 
 void oap_job_defaults(OAPJobOptions *o);
+/* The documents OpenPrint sends to printers: its own PDFs, and PostScript a program wrote itself (OAPSpooler
+ * keeps that in the queue as .ps). PCL and other printer data are kept, never sent. */
+#define OAP_FORMAT_PDF "application/pdf"
+#define OAP_FORMAT_PS "application/postscript"
+/* What a document is from its first bytes: OAP_FORMAT_PDF ("%PDF-"), OAP_FORMAT_PS ("%!", or "\004%!" after a
+ * driver's end-of-job byte), or NULL for anything else. */
+const char *oap_document_format(const unsigned char *head, size_t n);
+/* A PostScript document's name for itself: the "%%Title:" line of its header comments (DSC), with a (string)'s
+ * parentheses taken off, in the first n bytes. 1 when there is one. */
+int oap_ps_title(const unsigned char *head, size_t n, char *out, size_t cap);
 int oap_parse_ipp_uri(const char *uri, OAPUri *out);
+/* The Print-Job request up to the document: oap_ipp_build_prefix's for a PDF, every job setting (copies, media,
+ * orientation, colour, sides, pages). PostScript (format OAP_FORMAT_PS) sets its own paper and pages, so it gets
+ * document-format, job-name and copies only. */
 int oap_ipp_build_prefix(const OAPJobOptions *o, unsigned char *buf, size_t cap, size_t *out_len);
+int oap_ipp_build_prefix_doc(const OAPJobOptions *o, const char *format, unsigned char *buf, size_t cap, size_t *out_len);
 /* A paper's IPP media name (PWG 5101.1): iso_a4_210x297mm, na_letter_8.5x11in...; A4's for an unknown one. */
 const char *oap_ipp_media(int paper);
 int oap_pdf_write_demo(const char *path, const char *title);
@@ -44,6 +58,11 @@ typedef int (*OAPSendProgress)(void *ctx,const char *stage,unsigned long sent,un
  * any of it was sent, a failure is OAP_SEND_UNCERTAIN, never an automatic
  * retry. `status` says what happened in words. */
 int oap_ipp_submit_pdf_ex(const char *pdf_path,const OAPJobOptions *o,char *status,size_t status_len,
+                          OAPSendProgress notify,void *ctx);
+/* The same for a PDF or a PostScript document, by its first bytes. PostScript goes only to a printer that lists
+ * application/postscript among its formats (else a plain "not sent"), as it is, byte for byte, named by its
+ * %%Title when it has one; anything else is not sent. */
+int oap_ipp_submit_doc_ex(const char *path,const OAPJobOptions *o,char *status,size_t status_len,
                           OAPSendProgress notify,void *ctx);
 #ifdef __amigaos__
 int oap_run_print_dialog(const char *pdf_path,OAPJobOptions *o);
