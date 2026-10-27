@@ -106,7 +106,7 @@ check "nothing reached the printer for it" "^$n\$" "$(grep -c 'Print-Job' ps.log
 # CUPS's own printer emulator, when it is here: an independent IPP implementation, strict about requests.
 if command -v ippeveprinter >/dev/null 2>&1; then
     mkdir -p eve
-    ippeveprinter -r off -k -n 127.0.0.1 -p $P_EVE -d "$OUT/eve" -f application/pdf,application/postscript \
+    ippeveprinter -r off -k -n localhost -p $P_EVE -d "$OUT/eve" -f application/pdf,application/postscript \
         -F application/pdf "OpenPrint PS eve" > eve.log 2>&1 &
     PIDS="$PIDS $!"
     i=0; while [ $i -lt 30 ] && ! ./ipps_tool query ipp://127.0.0.1:$P_EVE/ipp/print 2>/dev/null | grep -q 'ps=1'; do sleep 1; i=$((i + 1)); done

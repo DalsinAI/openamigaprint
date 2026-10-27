@@ -667,6 +667,8 @@ static void print_now(void)
     copy(job.uri, sizeof(job.uri), R.options->printer_uri);
     job.has_print_options = 1;
     job.print = *R.options;
+    if (!R.ps)                                 /* a PDF goes unnamed, as before: naming PDFs is for its own change */
+        job.print.job_name[0] = 0;
     if (oav_submit(&job, R.request, sizeof(R.request), text, sizeof(text))) {
         R.busy = 1;
         R.percent = 0;
